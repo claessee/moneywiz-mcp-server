@@ -1,50 +1,82 @@
-# Architecture of the reconciliation fork
+# Architecture
 
-Local MCP client → `main.py` (official MCPServer, stdio) → factual services →
-`DatabaseManager` (async SQLite, consistent read snapshot) → user's primary store.
-No network server or model calls are part of this package.
+MoneyWiz MCP Server is a local stdio MCP service that reads a MoneyWiz Core Data SQLite database without modifying it.
 
-The existing Python package, async manager, service separation, Pydantic responses,
-CLI entry point and author attribution are preserved. Unsafe conversion/query
-internals and mixed subjective analytics were replaced rather than wrapped in
-compatibility fallbacks. Source history remains in Git at the starting SHA.
+```text
+MCP client
+   │ stdio
+   ▼
+MCP server (`main.py`)
+   ▼
+Factual services
+   ▼
+Schema resolver (`database/schema.py`)
+   ▼
+Read-only SQLite manager (`database/connection.py`)
+   ▼
+MoneyWiz Core Data database
+```
 
-`database/schema.py` reads Z_PRIMARYKEY and sqlite_master once per snapshot,
-validates IDs/names/inheritance/stored object keys, resolves account/transaction
-families, discovers generated tag joins and scheduled category aliases, and
-provides diagnostics. Fixed IDs never occur in production query logic. Unknown
-populated descendants fail. Optional entity absence is visible. All interpolated
-identifiers are validated against the inspected schema and double-quoted with
-escaped quote characters. Data values are always bound parameters.
+The package performs no model calls and exposes no network server.
 
-`database/connection.py` only accepts SELECT from service code. URI mode=ro,
-query_only and a deny-by-default SQLite authorizer independently reject writes,
-DDL, attach, vacuum, mutation pragmas and extension/file-writing functions.
-There is no optional third-party API or write context manager. Every operation
-opens BEGIN for a consistent read snapshot and closes without a commit.
-WAL is respected. Cache lifetime is that operation; no stale global entity cache.
+## Schema resolution
 
-`models/currency_types.py` normalizes finite amounts to Decimal and serializes
-strings with currency. Exact addition sizes its precision from operands. No
-monetary calculation uses float or SQL SUM. Grouping keys include currency and
-category ID. Date floats are confined to NSDate timestamp conversion.
+MoneyWiz uses Core Data. Numeric entity identifiers such as `Z_ENT` are implementation details and are not assumed to be stable across compiled model versions.
 
-`services/category_classification_service.py` follows factual references and
-parent hierarchies. Missing rows/names/cycles/conflicting field observations fail;
-no Unknown placeholders or financial importance heuristics exist.
-Account/budget/scheduled/transaction services retain their original responsibilities.
-Budgets and recurrence expose observed fields when derived semantics are uncertain.
-Account balances expose explicit provisional components and credit-limit candidates.
-Transaction counts and pages use one snapshot; aggregation streams all matches.
+`database/schema.py` inspects `Z_PRIMARYKEY`, `sqlite_master`, inheritance, required columns, populated entity families, generated relationship tables, and scheduled/category relationship aliases. The resulting mapping is scoped to the active connection/snapshot and discarded when that operation closes.
 
-`main.py` validates constrained MCP inputs, carries read-only metadata and returns
-structured success/error envelopes. A standard Python decorated signature preserves
-typed output schemas after adding the error envelope. The SDK's documented tracing
-opt-out is pinned to 2.3.0 and covered by tests. `validate.py` is an offline diagnostic
-CLI with section errors and nonzero status for incomplete checks; it cannot certify
-independent UI reconciliation.
+Production SQL therefore resolves logical entity names dynamically rather than depending on fixed numeric IDs.
 
-Tests use actual SQLite stores with fabricated data and remapped entities, including
-WAL concurrency and actual MCP client/server transports. The original mock-heavy
-API tests and subjective models were retired; the metadata regression remains.
-CI and the local script enforce format/lint/strict types/full security/tests/build.
+Dynamic identifiers discovered from the inspected schema are validated and quoted before use. Data values use bound parameters.
+
+## Read-only database boundary
+
+`database/connection.py` opens SQLite using URI `mode=ro`, enables `query_only`, disables trusted schema behavior, and installs a restrictive authorizer. Write statements, schema changes, attach operations, vacuum operations, mutation pragmas, and other write-capable operations are denied.
+
+There is no writable configuration switch, commit helper, write transaction helper, or raw-SQL MCP tool.
+
+Each service operation reads one consistent SQLite snapshot. WAL content is visible because `immutable=1` is intentionally not used. SQLite may still use normal shared-memory/locking metadata while reading a live WAL database; the application does not modify MoneyWiz financial rows, schema, or WAL records.
+
+## Financial representation
+
+`models/currency_types.py` converts supported stored amounts into decimal-safe representations and serializes amounts as strings with explicit currency codes.
+
+Financial aggregation is performed per currency. The server does not add nominal EUR, SEK, USD, or other values together and performs no implicit FX conversion.
+
+Where a MoneyWiz stored `REAL` has already lost decimal precision, the adapter cannot reconstruct information that SQLite no longer contains. It preserves the deterministic decimal representation of the stored value.
+
+## Services
+
+The service layer remains factual and deterministic:
+
+- accounts and balance components
+- transactions and transaction-type classification
+- categories and parent hierarchy
+- tags and payees
+- budgets using verified stored fields
+- scheduled transaction definitions
+- per-currency cashflow summaries
+
+The 2.x line intentionally removed subjective financial-health scores, savings recommendations, vague importance rankings, and recurrence forecasts that are better handled by the calling model from factual MCP data.
+
+## Error model
+
+Integrity-critical schema ambiguity is not converted into empty data, zero balances, or `Unknown` placeholders. Service failures return structured errors. MCP input-schema failures use normal MCP error status.
+
+This is deliberate: for personal financial data, a visible unsupported condition is safer than a plausible but incomplete answer.
+
+## Dates and pagination
+
+Intervals use `[start, end)` semantics. Date-only input resolves in an explicit IANA timezone; datetimes require an explicit offset or `Z`.
+
+Potentially large list results use stable ordering and bounded pagination with explicit matched/returned counts and truncation metadata. Aggregates that promise complete totals stream all matching rows rather than summing only a paginated page.
+
+## Reconciliation CLI
+
+`validate.py` provides a local, read-only reconciliation harness. It reports schema capability, account control data, transaction counts, per-currency totals, and relevant warnings without dumping individual transaction descriptions by default.
+
+Synthetic tests validate implementation behavior. Independent MoneyWiz-produced exports remain the strongest acceptance check for newly observed MoneyWiz schema semantics. See [`docs/RECONCILIATION.md`](docs/RECONCILIATION.md).
+
+## Trust boundary
+
+The server itself keeps the data path local and uses stdio. Once a connected MCP client requests a tool result, that client controls whether the returned data is sent to an external model provider. Client/provider privacy behavior is therefore outside this server's process boundary.
