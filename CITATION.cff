@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the repository and preserve upstream attribution."
+title: "MoneyWiz MCP Server"
+version: "2.0.0"
+date-released: 2026-10-03
+type: software
+license: MIT
+authors:
+  - family-names: "Valerio Arrieta"
+    given-names: "Juan Carlos"
+  - name: "claessee"
+repository-code: "https://github.com/claessee/moneywiz-mcp-server"
+url: "https://github.com/claessee/moneywiz-mcp-server"
+keywords:
+  - MCP
+  - Model Context Protocol
+  - MoneyWiz
+  - personal finance
+  - SQLite
+  - macOS
+  - read-only
+references:
+  - type: software
+    title: "Original MoneyWiz MCP Server"
+    authors:
+      - family-names: "Valerio Arrieta"
+        given-names: "Juan Carlos"
+    repository-code: "https://github.com/jcvalerio/moneywiz-mcp-server"
