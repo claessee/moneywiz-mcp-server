@@ -27,6 +27,8 @@ def parse_iso(value: str, zone: str) -> datetime:
             return datetime.fromisoformat(value).replace(tzinfo=tz)
         if not re.match(r"^\d{4}-\d{2}-\d{2}T", value):
             raise ValueError
+        if value.endswith("Z"):
+            value = f"{value[:-1]}+00:00"
         parsed = datetime.fromisoformat(value)
         if parsed.tzinfo is None:
             raise ValueError

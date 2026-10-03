@@ -22,6 +22,7 @@ from moneywiz_mcp_server.utils.date_utils import (
     core_data_timestamp_to_datetime,
     datetime_to_core_data_timestamp,
     interval,
+    parse_iso,
 )
 from moneywiz_mcp_server.validate import reconcile
 from tests.conftest import make_database
@@ -551,6 +552,11 @@ def test_lisbon_date_boundaries(start, end, hours):
     )
     assert p.start_inclusive
     assert p.end_exclusive
+
+
+def test_iso_datetime_terminal_z_is_supported():
+    parsed = parse_iso("2026-09-01T00:00:00Z", "UTC")
+    assert parsed == datetime(2026, 9, 1, tzinfo=timezone.utc)
 
 
 @pytest.mark.parametrize(
