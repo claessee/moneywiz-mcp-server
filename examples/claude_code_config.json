@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "moneywiz": {
-      "command": "/Users/macmini2/Scripts/Codex-files/moneywiz-mcp-server/.venv/bin/python",
+      "command": "/absolute/path/to/moneywiz-mcp-server/.venv/bin/python",
       "args": [
         "-m",
         "moneywiz_mcp_server"
