@@ -13,17 +13,17 @@ This project is based on the MIT-licensed [`jcvalerio/moneywiz-mcp-server`](http
 - Reworked monetary calculations around decimal-safe values and explicit currencies.
 - Removed implicit cross-currency arithmetic and automatic FX assumptions.
 - Added deterministic ISO date/time semantics and explicit result completeness/pagination.
+- Made UTC the default timezone while retaining explicit IANA timezone support.
+- Fixed category filters for MoneyWiz names containing non-breaking spaces and other Unicode whitespace, preserving stored names in output. The compatibility issue was identified in [HigorLoren's commit](https://github.com/HigorLoren/moneywiz-mcp-server/commit/077d7337d2f011023d81de7517d9024bed753a19); see the [fork delta audit](FORK_DELTA_AUDIT.md).
 - Replaced silent schema fallbacks with structured errors.
 - Added local real-database reconciliation tooling.
 - Expanded regression coverage across SQLite, WAL, schema remapping, write denial, dates, currencies, pagination, and the actual MCP protocol.
 
-## Real MoneyWiz validation
+## Local validation
 
-The 2.x implementation was independently compared with MoneyWiz-produced exports from a real macOS/iCloud MoneyWiz database.
+Use the validation CLI and MoneyWiz-produced exports to compare transaction counts/types, transfer legs, per-currency cashflow, categories, split transactions, and supported account balance components for your own store. The credit limit is returned separately from opening balance and stored transaction sums.
 
-Supported transaction counts/types, transfer legs/pairs, per-currency cashflow, category extraction, split-transaction detection, and current supported account balances reconciled with MoneyWiz. For the validated active credit cards, MoneyWiz displayed balances matched opening balance plus stored transaction sum without adding the credit limit.
-
-Private financial exports and account data are not included in this repository.
+Financial exports, account data, and validation results must remain private.
 
 ## Breaking changes from upstream 1.x
 

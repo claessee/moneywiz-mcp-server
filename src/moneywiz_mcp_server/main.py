@@ -175,7 +175,7 @@ async def get_account(account_id: Identifier) -> Account:
 async def search_transactions(
     start: Identifier,
     end: Identifier,
-    timezone: str = "Europe/Lisbon",
+    timezone: str = "UTC",
     account_ids: Filters | None = None,
     categories: Filters | None = None,
     transaction_type: str | None = None,
@@ -273,7 +273,7 @@ async def list_scheduled_transactions(
 async def summarize_cashflow(
     start: Identifier,
     end: Identifier,
-    timezone: str = "Europe/Lisbon",
+    timezone: str = "UTC",
     account_ids: Filters | None = None,
 ) -> dict[str, Any]:
     """Stream ALL matching transactions over [start,end); exact per-currency signed deposits/withdrawals, separate transfer legs and other type sums. No FX, cross-currency ranking or advice. Split categories remain explicitly unallocated."""

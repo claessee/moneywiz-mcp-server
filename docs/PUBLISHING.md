@@ -53,7 +53,7 @@ Do not publish this derivative under the upstream PyPI project identity. The exi
 
 The README artwork is stored under [`assets/`](assets/):
 
-- `moneywiz-mcp-hero.svg`
+- `moneywiz-mcp-hero.png`
 - `moneywiz-mcp-icon.svg`
 
 The artwork is original to this repository and does not reproduce the MoneyWiz/SILVERWIZ logo or trade dress.

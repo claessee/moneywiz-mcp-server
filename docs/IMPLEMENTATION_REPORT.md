@@ -2,7 +2,7 @@
 
 Date: 2026-10-03  
 Release line: **2.0.0**  
-Status: **RECONCILED for supported functionality**
+Status: **IMPLEMENTED with synthetic regression coverage and local validation tooling**
 
 ## Provenance
 
@@ -64,33 +64,17 @@ Before publication, the hardened implementation reported:
 
 Tests use fabricated financial data. No personal MoneyWiz database or real financial export is included in the repository.
 
-## Independent MoneyWiz reconciliation
+## Independent local validation
 
-The implementation was subsequently compared against independent MoneyWiz-produced exports from a real macOS/iCloud MoneyWiz database.
+Validate the adapter against independent MoneyWiz-produced transaction and balance exports for each supported store. Compare counts, entity classifications, signs, currencies, interval boundaries, category hierarchy, split transactions, transfer legs, and account balance components.
 
-For a complete real-data monthly interval, the MoneyWiz transaction export and MCP output matched for:
-
-- total transaction count
-- deposits and withdrawals
-- transfer-in and transfer-out legs
-- complete transfer pairing and values
-- per-currency expense totals
-- income totals
-- transaction currencies and type classification
-- date boundaries
-- category extraction
-- reversal signs
-- split-transaction detection
-
-A separate MoneyWiz balance report was then reconciled against the MCP account-control output. Every active supported account balance matched MoneyWiz to currency precision. Accounts requiring market/valuation semantics that the MCP intentionally does not claim remained explicitly unsupported.
-
-For the validated active credit-card accounts, MoneyWiz's displayed balance matched opening balance plus stored transaction sum; the credit limit was not added to the displayed balance.
+Calculated balances use opening balance plus stored transaction amounts. Credit limits are returned separately. Investment, forex, and loan valuation remains unsupported without independently proven semantics. Synthetic tests cannot establish universal compatibility with the private MoneyWiz schema.
 
 See [`RECONCILIATION.md`](RECONCILIATION.md).
 
 ## Remaining compatibility limits
 
-MoneyWiz's Core Data SQLite schema is a private implementation detail. A successful reconciliation against one real schema cannot prove universal compatibility with every MoneyWiz version or every possible account configuration.
+MoneyWiz's Core Data SQLite schema is a private implementation detail. A successful local validation cannot prove universal compatibility with every MoneyWiz version or every possible account configuration.
 
 Investment market valuation, forex valuation, loan valuation, and any other semantics not demonstrated from reproducible evidence remain intentionally non-authoritative.
 

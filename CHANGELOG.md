@@ -27,16 +27,19 @@ First public release of the hardened 2.x line, based on upstream `jcvalerio/mone
 - Incomplete scheduled income handling and ignored scheduled filtering semantics.
 - Budget filtering/default assumptions that could hide valid stored definitions.
 - Locale/naive/fallback date handling and unstable completeness semantics.
+- Category-name filtering for stored non-breaking spaces and Unicode whitespace, without changing displayed names or case-sensitive matching.
 
 ### Changed
 
 - Subjective financial-health, savings-recommendation, trend, and forecast-style services were removed from the MCP surface in favor of factual retrieval and deterministic aggregation.
 - Investment, forex, and loan valuation remain explicitly non-authoritative where MoneyWiz semantics are not proven.
-- Credit-card balance handling exposes factual components. Independent reconciliation against a real MoneyWiz database confirmed that the validated active credit-card displayed balances match opening balance plus stored transactions, without adding the credit limit.
+- Credit-card balance handling exposes opening balance, stored transaction sums, and credit limit as separate factual components for local validation.
+- UTC is the default timezone for MCP date filters and the validation CLI; callers may supply an explicit IANA timezone.
+- Release artifacts are published to GitHub only; the inherited upstream PyPI publishing workflow was removed.
 
 ### Validation
 
-Independent MoneyWiz exports were reconciled against the 2.x implementation for a complete real-data interval. Transaction counts/types, transfers, per-currency cashflow, categories, reversals, split-transaction detection, and supported current account balances matched. Real financial data used for reconciliation is not included in the repository.
+Synthetic tests cover transaction counts/types, transfers, per-currency cashflow, categories, reversals, split-transaction detection, and supported account balance components. Independent MoneyWiz-produced exports should be used for local acceptance checks; financial data and validation results must remain private.
 
 See [`docs/RECONCILIATION.md`](docs/RECONCILIATION.md) and [`docs/IMPLEMENTATION_REPORT.md`](docs/IMPLEMENTATION_REPORT.md).
 

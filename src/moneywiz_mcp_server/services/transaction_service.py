@@ -20,6 +20,7 @@ from moneywiz_mcp_server.utils.date_utils import (
     core_data_timestamp_to_datetime,
     datetime_to_core_data_timestamp,
 )
+from moneywiz_mcp_server.utils.text_utils import normalize_category_name
 
 from .account_service import AccountService, placeholders
 from .category_classification_service import CategoryClassificationService
@@ -110,13 +111,16 @@ class TransactionService:
                 await self.classifications.category(key)
                 for key in await self.classifications.rows("Category")
             ]
-            names = {c.name for c in all_categories}
-            if any(name not in names for name in categories):
+            requested_names = {normalize_category_name(name) for name in categories}
+            names = {normalize_category_name(c.name) for c in all_categories}
+            if not requested_names.issubset(names):
                 raise MoneyWizError("INVALID_PARAMETER", "Requested category is absent")
             ids = [
                 int(c.id)
                 for c in all_categories
-                if set(c.hierarchy).intersection(categories)
+                if requested_names.intersection(
+                    normalize_category_name(name) for name in c.hierarchy
+                )
             ]
             conditions.append(
                 "EXISTS (SELECT 1 FROM ZCATEGORYASSIGMENT c WHERE c.ZTRANSACTION=t.Z_PK AND c.ZCATEGORY IN ("  # nosec B608

@@ -79,6 +79,8 @@ async def test_all_tools_over_real_sdk_protocol(name, args):
         assert not result.is_error
         assert result.structured_content["error"] is None
         assert result.structured_content["data"] is not None
+        if name in ("search_transactions", "summarize_cashflow"):
+            assert result.structured_content["data"]["interval"]["timezone"] == "UTC"
         if name == "search_transactions":
             data = result.structured_content["data"]
             assert data["page"]["matched_count"] == 5
@@ -109,6 +111,37 @@ async def test_structured_error_and_logs_are_private(caplog):
     assert "PRIVATE-MISSING-ACCOUNT" not in caplog.text
     assert "Private fabricated" not in caplog.text
     assert "Fabricated employer" not in caplog.text
+
+
+async def test_category_nbsp_filter_over_mcp_preserves_stored_name(synthetic):
+    import sqlite3
+
+    stored_name = "Food\u00a0&\u00a0Dining"
+    requested_name = " \tFood &  Dining\n"
+    with sqlite3.connect(synthetic[0]) as db:
+        db.execute("UPDATE ZSYNCOBJECT SET ZNAME2=? WHERE Z_PK=201", (stored_name,))
+    async with Client(main.mcp) as client:
+        reply = await client.call_tool(
+            "search_transactions",
+            {
+                "start": "2026-09-01T00:00:00Z",
+                "end": "2026-10-01T00:00:00Z",
+                "categories": [requested_name, "Food & Dining"],
+                "limit": 1,
+            },
+        )
+        assert not reply.is_error
+        assert reply.structured_content["error"] is None
+        data = reply.structured_content["data"]
+        assert data["filters_applied"]["categories"] == [
+            requested_name,
+            "Food & Dining",
+        ]
+        assert data["page"]["matched_count"] == 11
+        assert data["page"]["returned_count"] == 1
+        category = data["page"]["items"][0]["categories"][0]
+        assert category["name"] == stored_name
+        assert category["hierarchy"] == ["Food", stored_name]
 
 
 async def test_mcp_input_bounds():
@@ -175,8 +208,6 @@ def test_validation_cli_does_not_dump_transactions(synthetic):
             "2026-09-01T00:00:00Z",
             "--end",
             "2026-10-01T00:00:00Z",
-            "--timezone",
-            "UTC",
         ],
         capture_output=True,
         text=True,
@@ -187,6 +218,7 @@ def test_validation_cli_does_not_dump_transactions(synthetic):
     assert report["account_count"] == 4
     assert not report["errors"]
     assert not report["ui_reconciliation_completed"]
+    assert report["interval"]["timezone"] == "UTC"
     assert "Private fabricated" not in result.stdout
     assert "Fabricated employer" not in result.stdout
     assert str(Path.home()) not in result.stdout

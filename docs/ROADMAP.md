@@ -1,6 +1,6 @@
 # Roadmap
 
-The 2.x baseline is implemented and independently reconciled for the currently supported MoneyWiz functionality. Future work should extend compatibility only from reproducible evidence.
+The 2.x baseline is implemented with synthetic regression coverage and local validation tooling. Future work should extend compatibility only from reproducible evidence.
 
 ## Priorities
 

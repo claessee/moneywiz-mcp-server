@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/moneywiz-mcp-hero.svg" alt="MoneyWiz MCP Server" width="100%">
+  <img src="docs/assets/moneywiz-mcp-hero.png" alt="MoneyWiz MCP Server" width="100%">
 </p>
 
 # MoneyWiz MCP Server
@@ -18,7 +18,7 @@ MoneyWiz MCP Server lets MCP-compatible clients query a local MoneyWiz database 
 
 The original `jcvalerio/moneywiz-mcp-server` proved that useful MoneyWiz access through MCP was possible. This maintained 2.x line hardens that idea for real financial data by removing fixed Core Data entity assumptions, making read-only behavior structural rather than optional, modernizing to MCP v2, and tightening money, date, completeness, privacy, and error semantics.
 
-The implementation has been reconciled against independent MoneyWiz exports for real transaction data and current supported account balances. This does not imply universal compatibility with every MoneyWiz schema version; unsupported or unrecognized schema conditions fail explicitly instead of silently returning partial data.
+The implementation includes synthetic regression tests and a local validation CLI. Validate supported results against MoneyWiz-produced exports for your own store; unsupported or unrecognized schema conditions fail explicitly instead of silently returning partial data.
 
 ## Key features
 
@@ -136,13 +136,13 @@ Cashflow summaries treat deposits as income and withdrawals as expenses within e
 
 ## Balance semantics
 
-Checking, savings, cash, and credit-card balance components are exposed for reconciliation. In the validated real MoneyWiz database, active supported balances matched MoneyWiz to currency precision, and credit-card displayed balances matched opening balance plus stored transactions rather than opening balance plus transactions plus credit limit.
+Checking, savings, cash, and credit-card balance components are exposed for reconciliation. The calculated balance is opening balance plus stored transaction amounts; the credit limit is returned separately. Compare these components with MoneyWiz for your own store.
 
 Investment, forex, and loan valuation remain intentionally non-authoritative where MoneyWiz semantics have not been proven. The server prefers an explicit unsupported result over a plausible-looking but unverified number.
 
 ## Dates and completeness
 
-Intervals use **[start, end)** semantics. Date-only inputs resolve at midnight in the requested IANA timezone, defaulting to `Europe/Lisbon`. Datetimes require an explicit offset or `Z`.
+Intervals use **[start, end)** semantics. Date-only inputs resolve at midnight in the requested IANA timezone, defaulting to `UTC`. Datetimes require an explicit offset or `Z`.
 
 Potentially large result sets are bounded and return `matched_count`, `returned_count`, `limit`, `offset`, `truncated`, and `next_offset` where applicable. Aggregates are not silently calculated from a truncated transaction page.
 
@@ -153,10 +153,10 @@ Run the reconciliation CLI against your own store before relying on the MCP:
 ```sh
 .venv/bin/python -m moneywiz_mcp_server.validate \
   --db "$HOME/Library/Containers/com.moneywiz.personalfinance/Data/Library/Application Support/MoneyWiz_iCloud.sqlite" \
-  --start 2026-09-01 --end 2026-10-01 --timezone Europe/Lisbon
+  --start 2025-01-01 --end 2025-02-01
 ```
 
-The project has been independently reconciled against real MoneyWiz exports for transaction counts, transaction types, transfers, per-currency cashflow, categories, split transactions, and current supported account balances. Real financial data used for reconciliation is not included in this repository.
+Compare transaction counts, transaction types, transfers, per-currency cashflow, categories, split transactions, and supported account balances with MoneyWiz-produced exports. Keep financial data and validation results private.
 
 See [`docs/RECONCILIATION.md`](docs/RECONCILIATION.md) and [`docs/IMPLEMENTATION_REPORT.md`](docs/IMPLEMENTATION_REPORT.md).
 

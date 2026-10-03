@@ -380,6 +380,46 @@ async def test_category_filter_before_pagination(db, categories, expected):
     assert result.returned_count == min(1, expected)
 
 
+@pytest.mark.parametrize("category_id", [200, 201])
+@pytest.mark.parametrize(
+    "stored_name",
+    ["Food\u00a0&\u00a0Dining", "Food & Dining", " \tFood\u00a0 &\n Dining  "],
+)
+async def test_category_whitespace_matching_preserves_names(
+    synthetic, category_id, stored_name
+):
+    mutate(
+        synthetic[0],
+        "UPDATE ZSYNCOBJECT SET ZNAME2=? WHERE Z_PK=?",
+        (stored_name, category_id),
+    )
+    manager = DatabaseManager(str(synthetic[0]))
+    try:
+        await manager.initialize()
+        service = TransactionService(manager)
+        result = await service.get_transactions(
+            PERIOD, categories=["Food & Dining"], limit=1
+        )
+        assert result.matched_count == 11
+        assert result.returned_count == 1
+        assert result.truncated
+        category = result.items[0].categories[0]
+        assert category.hierarchy[0 if category_id == 200 else -1] == stored_name
+        if category_id == 201:
+            assert category.name == stored_name
+        salary = await service.get_transactions(PERIOD, categories=["Salary"])
+        assert salary.matched_count == 3
+        assert {c.name for tx in salary.items for c in tx.categories} == {"Salary"}
+        for unrelated in ("food & Dining", "Food + Dining", "Food & Din", "missing"):
+            with pytest.raises(MoneyWizError, match="Requested category is absent"):
+                await service.get_transactions(PERIOD, categories=[unrelated])
+        assert (
+            await service.get_transactions(PERIOD, categories=[])
+        ).matched_count == 0
+    finally:
+        await manager.close()
+
+
 @pytest.mark.parametrize(
     "kwargs",
     [
@@ -538,13 +578,13 @@ async def test_balance_components_and_credit_uncertainty(db):
 @pytest.mark.parametrize(
     ("start", "end", "hours"),
     [
-        ("2026-03-29", "2026-03-30", 23),
-        ("2026-10-25", "2026-10-26", 25),
+        ("2026-03-08", "2026-03-09", 23),
+        ("2026-11-01", "2026-11-02", 25),
         ("2026-09-30", "2026-10-01", 24),
     ],
 )
-def test_lisbon_date_boundaries(start, end, hours):
-    p = interval(start, end)
+def test_explicit_timezone_date_boundaries(start, end, hours):
+    p = interval(start, end, "America/New_York")
     assert (
         datetime_to_core_data_timestamp(p.end)
         - datetime_to_core_data_timestamp(p.start)
@@ -552,6 +592,18 @@ def test_lisbon_date_boundaries(start, end, hours):
     )
     assert p.start_inclusive
     assert p.end_exclusive
+
+
+def test_default_interval_timezone_is_utc():
+    p = interval("2026-03-08", "2026-03-09")
+    assert p.timezone == "UTC"
+    assert p.start.utcoffset().total_seconds() == 0
+    assert p.end.utcoffset().total_seconds() == 0
+    assert (
+        datetime_to_core_data_timestamp(p.end)
+        - datetime_to_core_data_timestamp(p.start)
+        == 24 * 3600
+    )
 
 
 def test_iso_datetime_terminal_z_is_supported():
@@ -562,7 +614,7 @@ def test_iso_datetime_terminal_z_is_supported():
 @pytest.mark.parametrize(
     ("start", "end", "zone"),
     [
-        ("10/03/2026", "2026-10-04", "Europe/Lisbon"),
+        ("10/03/2026", "2026-10-04", "UTC"),
         ("2026-10-03T10:00", "2026-10-04", "UTC"),
         ("2026-02-30", "2026-03-01", "UTC"),
         ("2026-10-03", "2026-10-03", "UTC"),

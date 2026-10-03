@@ -40,7 +40,7 @@ def parse_iso(value: str, zone: str) -> datetime:
         ) from exc
 
 
-def interval(start: str, end: str, zone: str = "Europe/Lisbon") -> Interval:
+def interval(start: str, end: str, zone: str = "UTC") -> Interval:
     first, last = parse_iso(start, zone), parse_iso(end, zone)
     if first.astimezone(timezone.utc) >= last.astimezone(timezone.utc):
         raise MoneyWizError("INVALID_PARAMETER", "Start must precede exclusive end")

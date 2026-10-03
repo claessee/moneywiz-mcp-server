@@ -1,38 +1,8 @@
 # MoneyWiz reconciliation
 
-The 2.x implementation has been independently reconciled against a real MoneyWiz macOS/iCloud database and MoneyWiz-produced exports for supported functionality.
+Use the local validation CLI with independent MoneyWiz-produced exports to check the adapter against your own store. Keep the database, financial exports, and validation results private.
 
-This does **not** prove compatibility with every MoneyWiz release or every possible account type. MoneyWiz uses a private Core Data SQLite schema, so new schema variants must still be validated. The project's rule is to fail explicitly on unsupported or ambiguous schema conditions rather than return plausible but incomplete data.
-
-## What was independently confirmed
-
-For a complete September 2026 interval, an independent MoneyWiz transaction export matched the MCP exactly for:
-
-- total transaction count
-- deposits and withdrawals
-- transfer-in and transfer-out legs
-- transfer pairing and values
-- EUR expense totals
-- SEK expense totals
-- SEK income
-- transaction currencies
-- transaction type classification
-- interval boundaries
-- category extraction
-- reversal signs
-- split-transaction detection
-
-A separate MoneyWiz balance report was then compared with the MCP's account-control output. Every active account supported by the MCP's balance calculation matched MoneyWiz to currency precision. Investment accounts remained intentionally unsupported rather than exposing an invented market valuation.
-
-For the validated active credit-card accounts, MoneyWiz's displayed balance matched:
-
-```text
-opening balance + stored transaction sum
-```
-
-The credit limit was not part of the displayed balance. This resolved the practical credit-card balance uncertainty for the validated database.
-
-No real account names, balances, transaction descriptions, transaction IDs, exported CSVs, or database files are included in this repository.
+MoneyWiz uses a private Core Data SQLite schema, so new schema variants must be validated. The project's rule is to fail explicitly on unsupported or ambiguous schema conditions rather than return plausible but incomplete data. Synthetic regression tests do not prove compatibility with every MoneyWiz release or account type.
 
 ## Run your own reconciliation
 
@@ -41,10 +11,10 @@ Use the validation CLI against your own primary MoneyWiz store:
 ```sh
 .venv/bin/python -m moneywiz_mcp_server.validate \
   --db "$HOME/Library/Containers/com.moneywiz.personalfinance/Data/Library/Application Support/MoneyWiz_iCloud.sqlite" \
-  --start 2026-09-01 --end 2026-10-01 --timezone Europe/Lisbon
+  --start 2025-01-01 --end 2025-02-01
 ```
 
-The iCloud path above is a common current location. Verify the actual primary database on your Mac. Do not select `_shared.sqlite`, `-wal`, `-shm`, or `-journal` files as the primary database.
+The dates above are illustrative; choose the interval covered by your export. Date-only inputs default to UTC; pass `--timezone` with an explicit IANA zone if needed. The iCloud path above is a common current location. Verify the actual primary database on your Mac. Do not select `_shared.sqlite`, `-wal`, `-shm`, or `-journal` files as the primary database.
 
 The harness is read-only and does not create backups or change the database. If you validate a live WAL-mode database, keep the main database and its WAL/SHM state consistent. A MoneyWiz-produced backup or a consistent local snapshot is preferable for repeatable multi-page comparisons.
 

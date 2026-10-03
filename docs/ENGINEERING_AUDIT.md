@@ -50,7 +50,7 @@ be errors or explicit unsupported states, never a fabricated default.
 Validation plan: fabricated full SQLite schemas with remapped entity IDs and
 real async reads, malformed/ambiguous stores, authorizer/ro/query_only mutation
 probes, relationship and reference failures, all types/filter/pagination,
-exact decimal/currency tests, UTC/Lisbon boundaries and DST, MCP v2 protocol
+exact decimal/currency tests, UTC and explicit-zone boundaries and DST, MCP v2 protocol
 roundtrips, read-only reconciliation CLI, lint/format/strict typing/full Bandit,
 locked dependency vulnerability audit and wheel/sdist validation. Financial
 acceptance still requires independent MoneyWiz UI reconciliation.

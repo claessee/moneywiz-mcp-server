@@ -46,7 +46,7 @@ async def validate_classifications(db: DatabaseManager, entity: str) -> int:
 
 
 async def reconcile(
-    db_path: str, start: str, end: str, zone: str = "Europe/Lisbon"
+    db_path: str, start: str, end: str, zone: str = "UTC"
 ) -> dict[str, Any]:
     period = interval(start, end, zone)
     path = validate_path(db_path)
@@ -135,7 +135,7 @@ def main() -> int:
     parser.add_argument("--db", required=True, help="Exact MoneyWiz SQLite path")
     parser.add_argument("--start", required=True, help="Inclusive ISO date/datetime")
     parser.add_argument("--end", required=True, help="Exclusive ISO date/datetime")
-    parser.add_argument("--timezone", default="Europe/Lisbon")
+    parser.add_argument("--timezone", default="UTC")
     args = parser.parse_args()
     try:
         report = asyncio.run(reconcile(args.db, args.start, args.end, args.timezone))
