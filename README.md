@@ -1,81 +1,106 @@
-# MoneyWiz MCP Server — local read-only reconciliation fork
+<p align="center">
+  <img src="docs/assets/moneywiz-mcp-hero.svg" alt="MoneyWiz MCP Server" width="100%">
+</p>
 
-This fork provides factual MoneyWiz retrieval and exact, deterministic aggregation
-through the official Python MCP SDK 2.3.0. It is **READY FOR READ-ONLY
-RECONCILIATION**, not RECONCILED. No real MoneyWiz database/UI has been compared
-in this implementation session. Original author/license attribution is retained.
+# MoneyWiz MCP Server
 
-## Safety and scope
+**Unofficial, local-first, permanently read-only MCP v2 access to MoneyWiz on macOS.**
 
-SQLite always opens with `mode=ro`, `query_only=ON`, `trusted_schema=OFF` and a
-read-only authorizer. There is no writable setting, transaction/commit helper,
-third-party database API, raw-SQL tool, network transport or backup-before-write
-path. `MONEYWIZ_READ_ONLY=false` is rejected rather than interpreted as permission.
-Each tool opens one read transaction, validates SQLite with `quick_check`, builds
-its schema map, reads a consistent snapshot and closes it. WAL data is read;
-`immutable=1` is intentionally avoided because it can ignore WAL changes.
-SQLite may use its normal WAL/shared-memory locking metadata; no financial rows,
-schema, main database bytes or WAL records are written by this server.
+MoneyWiz MCP Server lets MCP-compatible clients query a local MoneyWiz database through a deterministic, read-only interface. It is designed for factual retrieval and reproducible aggregation, not financial advice.
 
-Core Data SQLite is private implementation detail, not a supported MoneyWiz API.
-The adapter covers entity/column observations from upstream source and PR #44,
-tested with fabricated stores with two substantially different entity maps,
-TEXT/REAL monetary values and WAL. This does not demonstrate universal
-MoneyWiz 2/3/iCloud compatibility. Missing/ambiguous relationships, unknown
-populated transaction/account descendants and invalid references fail explicitly.
-Unused abstract entity definitions are allowed. Missing optional capabilities
-are disclosed in `schema_info` and fail explicitly when requested.
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB)](https://www.python.org/)
+[![MCP](https://img.shields.io/badge/MCP-v2-35c7c9)](https://modelcontextprotocol.io/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![macOS](https://img.shields.io/badge/platform-macOS-lightgrey)](https://www.apple.com/macos/)
+[![Read only](https://img.shields.io/badge/database-read--only-2ea44f)](#security-model)
 
-## Install the local working copy
+## Why this project exists
 
-This branch has breaking tool/configuration changes and version `2.0.0.dev0`.
-It has not been published. Do not install the upstream PyPI release expecting
-these guarantees. With uv installed:
+The original `jcvalerio/moneywiz-mcp-server` proved that useful MoneyWiz access through MCP was possible. This maintained 2.x line hardens that idea for real financial data by removing fixed Core Data entity assumptions, making read-only behavior structural rather than optional, modernizing to MCP v2, and tightening money, date, completeness, privacy, and error semantics.
 
-```sh
-cd /Users/macmini2/Scripts/Codex-files/moneywiz-mcp-server
-uv sync --frozen --all-extras --python 3.12.15
-```
+The implementation has been reconciled against independent MoneyWiz exports for real transaction data and current supported account balances. This does not imply universal compatibility with every MoneyWiz schema version; unsupported or unrecognized schema conditions fail explicitly instead of silently returning partial data.
 
-The session also leaves an installed `.venv`. Python 3.12.15 is the local tested
-runtime; Python 3.10/3.14 and Linux/macOS are configured in CI but only executed
-locally if recorded in the validation report. CI checks are blocking.
+## Key features
 
-## Exact database path
+- Permanent SQLite read-only access using `mode=ro`, `query_only=ON`, `trusted_schema=OFF`, and a deny-by-default authorizer.
+- Dynamic Core Data entity discovery from `Z_PRIMARYKEY`; no production dependence on fixed numeric `Z_ENT` IDs.
+- MCP Python SDK v2 with local stdio transport.
+- Accounts, transactions, categories, payees, tags, budgets, scheduled transactions, and deterministic cashflow summaries.
+- Decimal-safe financial arithmetic and explicit currencies.
+- No implicit FX conversion or cross-currency totals.
+- Stable pagination and explicit truncation/completeness metadata.
+- Explicit schema and integrity errors instead of silent fallbacks.
+- Local reconciliation CLI for validating a real MoneyWiz store.
+- No telemetry exporter and no server-side network transport.
 
-Set `MONEYWIZ_DB_PATH` in your MCP client's environment to the absolute primary
-SQLite file. The server deliberately does not load `.env`, inspect arbitrary
-home directories or pick the first candidate. A reported iCloud location is:
+## Architecture
+
+<p align="center">
+  <img src="docs/assets/moneywiz-mcp-icon.svg" alt="MoneyWiz MCP Server icon" width="220">
+</p>
+
+The data path is intentionally simple:
 
 ```text
-~/Library/Containers/com.moneywiz.personalfinance/Data/Library/Application Support/MoneyWiz_iCloud.sqlite
+MCP client
+   ↓ stdio
+MoneyWiz MCP Server
+   ↓
+services
+   ↓
+Schema resolver
+   ↓
+read-only SQLite
+   ↓
+MoneyWiz Core Data database
 ```
 
-Expand `~` to your actual home directory in JSON/TOML client configuration. This
-path is a documented candidate, not proof of your installation's actual path.
-Legacy container `Data/Documents` stores, including `.AppData`, remain discovery
-candidates. Explicit paths must be regular, readable, nonempty, valid SQLite with
-required Core Data/MoneyWiz tables and entities. Symlink targets are validated.
-`-wal`, `-shm`, `-journal` and `_shared.sqlite` are intentionally rejected as
-primary inputs. Adjacent valid SQLite WAL/SHM files remain necessary for reading
-a live WAL-mode store; never select them or discard them from a live snapshot.
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`docs/ENGINEERING_AUDIT.md`](docs/ENGINEERING_AUDIT.md) for implementation detail.
 
-`MONEYWIZ_AUTO_DISCOVER=true` explicitly opts into searching only known MoneyWiz
-container/application-support roots. Every candidate undergoes the same
-validation and must have account rows. Zero or multiple plausible candidates
-produce an error; neither directory order nor modification time chooses a store.
-Prefer explicit configuration for all real use.
+## Requirements
 
-## Local MCP client setup
+- macOS with MoneyWiz installed or a compatible MoneyWiz SQLite database/backup.
+- Python 3.10 or later.
+- `uv` recommended for deterministic installation.
+- An MCP-compatible client such as Codex, Claude Desktop, or another stdio MCP client.
 
-For Codex, use an STDIO server with an absolute executable, arguments
-`["-m", "moneywiz_mcp_server"]`, and the exact database path in `env`.
-[Official client configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)
-supports the following TOML shape (also provided in `examples/codex_config.toml`):
+## Install
+
+Clone this repository and install the locked environment:
+
+```sh
+git clone https://github.com/claessee/moneywiz-mcp-server.git
+cd moneywiz-mcp-server
+uv sync --frozen --all-extras
+```
+
+The server entry point is:
+
+```sh
+.venv/bin/python -m moneywiz_mcp_server
+```
+
+## Configure the MoneyWiz database
+
+For real use, set an explicit absolute path in `MONEYWIZ_DB_PATH`.
+
+A common current macOS/iCloud location is:
+
+```text
+$HOME/Library/Containers/com.moneywiz.personalfinance/Data/Library/Application Support/MoneyWiz_iCloud.sqlite
+```
+
+Use the primary SQLite file only. Do not select `_shared.sqlite`, `-wal`, `-shm`, or `-journal` files as the database path.
+
+Optional discovery is available with `MONEYWIZ_AUTO_DISCOVER=true`, but explicit configuration is preferred. Discovery validates candidates and fails on ambiguity rather than choosing a database heuristically.
+
+## Codex configuration
+
+Use an absolute Python path and an absolute database path:
 
 ```toml
 [mcp_servers.moneywiz]
-command = "/Users/macmini2/Scripts/Codex-files/moneywiz-mcp-server/.venv/bin/python"
+command = "/absolute/path/to/moneywiz-mcp-server/.venv/bin/python"
 args = ["-m", "moneywiz_mcp_server"]
 
 [mcp_servers.moneywiz.env]
@@ -83,129 +108,69 @@ MONEYWIZ_DB_PATH = "/absolute/path/to/MoneyWiz_iCloud.sqlite"
 MAX_RESULTS = "500"
 ```
 
-This is a configuration example; this task has not changed your Codex settings
-or connected any real database. Reload the client and call `server_status`, then
-`schema_info`, after completing local reconciliation. Generic local MCP clients
-can use the JSON examples in `examples/`.
+Equivalent stdio configurations can be used with other MCP clients. Examples are in [`examples/`](examples/).
 
-This server implements local stdio only. A cloud-only ChatGPT connection requires
-an explicitly designed additional access mechanism. No tunnel, HTTP listener,
-remote database access or publishing is included or authorized here.
+## Available tools
 
-## Tool catalogue
-
-All tools carry read-only/non-destructive/closed-world annotations. Database
-controls enforce safety independently of these advisory annotations. Successful
-responses are `{ "data": ..., "error": null }`; failures contain a structured
-`error.code` and fixed operational/schema message, with `data: null`. Inspect the
-error field on every call; a normal MCP transport response is not a success
-assertion. SDK input-schema failures use MCP `is_error=true`.
-
-| Tool | Meaning |
+| Tool | Purpose |
 | --- | --- |
-| `server_status` | Connection/SQLite/schema verification, no balances or paths |
-| `schema_info` | Observed entity IDs, table columns, missing optional capabilities |
-| `list_accounts` | Stored accounts, currency and provisional balance components |
-| `get_account` | One returned numeric ID or exact ZGID; ambiguous identifiers fail |
-| `search_transactions` | Explicit interval, account/category/type filtering and pagination |
-| `list_categories` | Category IDs, names and complete parent hierarchy |
-| `list_tags` | Factual stored tag IDs and names |
-| `list_payees` | Factual stored payee IDs and names |
-| `list_budgets` | All budgets, including zero/negative amounts, stored monetary components |
-| `list_scheduled_transactions` | Income/expense/transfer handlers, disabled and one-off schedules included |
-| `summarize_cashflow` | Complete per-currency cashflow/type sums and bounded expense-category breakdown |
+| `server_status` | Verify database, SQLite, and schema readiness |
+| `schema_info` | Inspect discovered MoneyWiz entities and capabilities |
+| `list_accounts` | List accounts and diagnostic balance components |
+| `get_account` | Retrieve one account by returned ID or exact identifier |
+| `search_transactions` | Search transactions by interval, account, category, and type |
+| `list_categories` | List categories with complete parent hierarchy |
+| `list_tags` | List stored tags |
+| `list_payees` | List stored payees |
+| `list_budgets` | List factual stored budget fields |
+| `list_scheduled_transactions` | List stored scheduled transaction definitions |
+| `summarize_cashflow` | Deterministic per-currency cashflow and category summary |
 
-`search_transactions` supports `deposit`, `withdraw`, `transfer_in`,
-`transfer_out`, `investment_buy`, `investment_sell`, `investment_exchange`,
-`refund`, `reconcile`, `transfer_budget`. Names map to entity names, never numeric
-IDs or guessed signs. Requested types missing from a schema return explicit
-errors. `account_ids` accept returned IDs or exact ZGIDs; duplicates deduplicate,
-missing/ambiguous references fail. Category names match themselves and descendants;
-equal leaf names can select multiple categories, whose identities remain explicit
-in output. Empty filter lists match no rows and never widen a query.
+All list-style tools expose bounded pagination and completeness metadata. See the source tool schemas for the authoritative parameter contract.
 
-## Money and balance semantics
+## Money and currency semantics
 
-Every amount is `{ "amount": "123.4500", "currency": "EUR" }`. Decimal strings
-retain precision. TEXT/INTEGER/REAL values normalize through their deterministic
-Python decimal textual representation; precision already lost in SQLite REAL
-storage cannot be reconstructed. Arithmetic uses sufficient decimal precision,
-never SQLite floating-point SUM or float money calculations. No FX, cross-currency
-total, nominal currency ranking or inferred primary currency exists.
+Every returned monetary value carries an explicit currency and uses a decimal string representation. The server does not combine nominal amounts across currencies and does not perform implicit FX conversion.
 
-Cashflow income is signed `DepositTransaction` amounts; expenses are negated
-`WithdrawTransaction` amounts. Reversals keep their signs. Net is income minus
-expenses within each currency. Refunds, investments, reconciliations and budget
-transfers are separately labelled stored sums, excluded from these narrowly
-specified income/expense totals. Transfers count **legs**, not deduplicated transfer
-pairs, and never count as income. Expense category breakdown uses category IDs,
-not leaf-name merging; split expenses stay in currency totals with an explicit
-unallocated count rather than fabricated category allocation.
+Cashflow summaries treat deposits as income and withdrawals as expenses within each currency. Transfers, reconciliations, refunds, and investment transactions remain distinct stored transaction types rather than being silently reclassified.
 
-Balances are **provisional**, opening balance plus all observed account amount
-fields, with per-type sums/counts. Null opening balance means no calculated
-balance. Investment/forex/loan valuation is not claimed. Credit cards expose
-opening balance, transaction sum, credit limit, and candidates with/without the
-limit. Neither candidate is labelled authoritative. Issue #48 offers insufficient
-evidence to choose a general credit-card formula. Compare components to the UI.
+## Balance semantics
 
-Budgets expose stored `ZOPENINGBALANCE1`/`ZAMOUNT1`, with their own verified
-currency code/name or `Currency.ZCODE` reference. No account-derived currency,
-assumed CRC, guessed limit, rollover, spent amount or subjective risk label is
-returned. Conflicting/unresolved currency fields are explicit unsupported-schema
-errors. Scheduled data exposes stored recurrence fields; it does not guess end
-conditions, generate executions or treat approximate 30-day months as months.
+Checking, savings, cash, and credit-card balance components are exposed for reconciliation. In the validated real MoneyWiz database, active supported balances matched MoneyWiz to currency precision, and credit-card displayed balances matched opening balance plus stored transactions rather than opening balance plus transactions plus credit limit.
 
-## Dates, ordering and completeness
+Investment, forex, and loan valuation remain intentionally non-authoritative where MoneyWiz semantics have not been proven. The server prefers an explicit unsupported result over a plausible-looking but unverified number.
 
-Intervals are **[start, end)**. Dates are ISO `YYYY-MM-DD` at midnight in the
-explicit IANA timezone (default `Europe/Lisbon`); datetimes require `T` and an
-explicit offset/`Z`. Naive datetimes, locale dates and natural-language periods
-are rejected. Resolved timezone-aware endpoints are returned. NSDate's epoch is
-2001-01-01T00:00:00Z. Stored dates return UTC, preserving their instant rather than
-inventing a database timezone. Lisbon DST days are tested at 23 and 25 hours.
-Malformed stored dates cannot disappear behind a WHERE interval filter.
+## Dates and completeness
 
-Lists accept `limit=1..500` (default 100), `offset=0..10000000` and return
-`matched_count`, `returned_count`, `limit`, `offset`, `truncated`, `next_offset`.
-`MAX_RESULTS` can impose a lower list limit. Transactions order by date DESC,
-ID DESC; schedules by execution date ASC, ID ASC; other lists by ID ASC. Counts
-and rows share a snapshot. Offset pagination across separate live-store calls
-can change when MoneyWiz edits records; use a consistent frozen copy for a full
-multi-page export. A page with an offset is explicitly partial even at the end.
+Intervals use **[start, end)** semantics. Date-only inputs resolve at midnight in the requested IANA timezone, defaulting to `Europe/Lisbon`. Datetimes require an explicit offset or `Z`.
 
-Cashflow streams every matched row; totals are never limited to a transaction
-page. The nested expense-category page is bounded at 500 and reports its own
-truncation; `truncated=false` at cashflow level describes the complete totals.
-Use category-filtered transaction pages to investigate any omitted category
-records. Schema diagnostics bound stores at 500 tables/entities and 1000 columns
-per table; cashflow has at most 500 currency groups, otherwise explicit errors.
+Potentially large result sets are bounded and return `matched_count`, `returned_count`, `limit`, `offset`, `truncated`, and `next_offset` where applicable. Aggregates are not silently calculated from a truncated transaction page.
 
-## Reconciliation and privacy
+## Validation
 
-Run the local command before client use; [the procedure](docs/RECONCILIATION.md)
-includes exact commands, comparisons and credit-card diagnostics. Exit codes:
-0 = adapter checks completed, **UI comparison still pending**;
-1 = database/configuration validation failed; 2 = explicit incomplete diagnostic
-sections. A zero exit code does not mean RECONCILED. Output omits individual
-transactions/payees/notes by default and uses a home-relative or masked path.
+Run the reconciliation CLI against your own store before relying on the MCP:
 
-The server performs no networking and installs no telemetry exporter. The SDK's
-default OpenTelemetry server middleware is removed using its
-[documented opt-out](https://py.sdk.modelcontextprotocol.io/run/opentelemetry/).
-Requested data travels over stdio to the MCP client; that client may forward
-tool results to its model provider under its own policy. Routine server logs
-contain no financial records/SQL/arguments/full paths. Keep reconciliation output
-local; database files and reconciliation JSON are ignored by Git and excluded
-from packages. Tests use fabricated data only and never auto-discover real stores.
+```sh
+.venv/bin/python -m moneywiz_mcp_server.validate \
+  --db "$HOME/Library/Containers/com.moneywiz.personalfinance/Data/Library/Application Support/MoneyWiz_iCloud.sqlite" \
+  --start 2026-09-01 --end 2026-10-01 --timezone Europe/Lisbon
+```
 
-## Upgrade and development
+The project has been independently reconciled against real MoneyWiz exports for transaction counts, transaction types, transfers, per-currency cashflow, categories, split transactions, and current supported account balances. Real financial data used for reconciliation is not included in this repository.
 
-Keep a local snapshot/branch of the validated checkout. Read changes to schema,
-SDK, money, date and tool contracts before upgrading. Run `uv sync --frozen`,
-all checks and UI reconciliation after any change; restart the MCP client.
-Pin the SDK/dependencies through `pyproject.toml` and committed hash-bearing
-`uv.lock`; do not run an unconstrained install in an MCP startup command.
+See [`docs/RECONCILIATION.md`](docs/RECONCILIATION.md) and [`docs/IMPLEMENTATION_REPORT.md`](docs/IMPLEMENTATION_REPORT.md).
+
+## Security model
+
+The server cannot enable writable mode. SQLite is opened with URI `mode=ro`, `PRAGMA query_only=ON`, `trusted_schema=OFF`, and a restrictive SQLite authorizer. There is no raw-SQL MCP tool or commit/write helper.
+
+The server itself performs no financial-data network calls. Requested MCP results are sent over stdio to the connected client; that client may then send selected tool results to its model provider according to the client's own privacy policy and settings.
+
+SQLite may use normal locking/shared-memory metadata while reading a live WAL-backed store. The guarantee is that this server does not modify MoneyWiz financial rows, schema, or WAL records.
+
+See [`SECURITY.md`](SECURITY.md).
+
+## Development
 
 ```sh
 uv run --frozen pytest
@@ -219,10 +184,16 @@ uv build --no-sources
 uv run --frozen twine check dist/*
 ```
 
-The full suite enforces 85% global coverage and a separate 90% minimum in each
-critical database/schema/money/service/date/MCP module, with regression-heavy critical components
-rather than trivial mocks. Full Bandit scanning is enabled; reviewed B608
-exemptions cover only dynamically built bound-value/quoted-identifier queries.
-No global B608 exemption or nonblocking type/security checks remain.
-See [engineering evidence](docs/ENGINEERING_AUDIT.md) and
-[implementation/validation report](docs/IMPLEMENTATION_REPORT.md).
+Tests use fabricated financial data only. Contributions must preserve permanent read-only behavior, explicit currencies, deterministic schema handling, and regression coverage for any new MoneyWiz schema assumptions. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## Origins and attribution
+
+This project is based on [`jcvalerio/moneywiz-mcp-server`](https://github.com/jcvalerio/moneywiz-mcp-server), created by Juan Carlos Valerio Arrieta and contributors. The complete Git history is retained and the project remains MIT licensed. See [`ATTRIBUTION.md`](ATTRIBUTION.md).
+
+## License
+
+MIT. See [`LICENSE`](LICENSE).
+
+## Unofficial project
+
+MoneyWiz™ is a registered trademark and property of SILVERWIZ LLC. This project is independent, unofficial, and is not affiliated with, sponsored by, or endorsed by SILVERWIZ LLC. No MoneyWiz or SILVERWIZ logos or proprietary artwork are included.
