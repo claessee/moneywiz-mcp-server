@@ -1,5 +1,9 @@
 # Architecture
 
+<p align="center">
+  <img src="docs/assets/moneywiz-mcp-architecture.jpg" alt="MoneyWiz MCP Server architecture" width="100%">
+</p>
+
 MoneyWiz MCP Server is a local stdio MCP service that reads a MoneyWiz Core Data SQLite database without modifying it.
 
 ```text
