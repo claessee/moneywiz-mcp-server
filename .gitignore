@@ -56,3 +56,14 @@ claude_desktop_config_real.json
 specs/
 SESSION_CONTEXT.md
 CLAUDE.md
+
+# Private databases and reconciliation outputs
+*.sqlite
+*.sqlite3
+*.db
+*-wal
+*-shm
+*-journal
+reconciliation*.json
+.mypy_cache/
+.ruff_cache/

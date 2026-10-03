@@ -1,11 +1,14 @@
 {
   "mcpServers": {
     "moneywiz": {
-      "command": "python",
-      "args": ["-m", "moneywiz_mcp_server"],
+      "command": "/Users/macmini2/Scripts/Codex-files/moneywiz-mcp-server/.venv/bin/python",
+      "args": [
+        "-m",
+        "moneywiz_mcp_server"
+      ],
       "env": {
-        "MONEYWIZ_DB_PATH": "/Users/username/Library/Containers/com.moneywiz.personalfinance-setapp/Data/Documents/.AppData/ipadMoneyWiz.sqlite",
-        "MONEYWIZ_READ_ONLY": "true"
+        "MONEYWIZ_DB_PATH": "/absolute/path/to/MoneyWiz_iCloud.sqlite",
+        "MAX_RESULTS": "500"
       }
     }
   }

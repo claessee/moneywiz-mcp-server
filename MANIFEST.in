@@ -1,0 +1,6 @@
+include LICENSE README.md ARCHITECTURE.md CHANGELOG.md SECURITY.md CONTRIBUTING.md uv.lock .python-version
+recursive-include docs *.md
+recursive-include tests *.py
+recursive-include examples *.json *.toml
+recursive-exclude * *.sqlite *.sqlite3 *.db *.jsonl
+recursive-include scripts *.py *.sh

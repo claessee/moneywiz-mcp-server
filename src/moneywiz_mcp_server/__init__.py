@@ -1,7 +1,7 @@
 """MoneyWiz MCP Server - A Model Context Protocol server for MoneyWiz financial data.
 
-This package provides MCP tools for accessing MoneyWiz SQLite database,
-enabling AI assistants to perform financial analysis and transaction management.
+This package provides permanently read-only MoneyWiz SQLite retrieval and
+deterministic aggregation. Financial semantics require local UI reconciliation.
 """
 
 from importlib.metadata import PackageNotFoundError, version

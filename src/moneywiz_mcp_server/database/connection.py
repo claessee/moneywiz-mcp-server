@@ -1,221 +1,114 @@
-"""Database connection management for MoneyWiz SQLite database."""
+"""Permanent read-only SQLite access with one consistent snapshot per operation."""
 
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
-import logging
+from collections.abc import AsyncIterator
 from pathlib import Path
+import sqlite3
 from typing import Any
-
-try:
-    from moneywiz_api import MoneywizApi
-except ImportError:
-    # For testing without moneywiz-api installed
-    MoneywizApi = None
 
 import aiosqlite
 
-logger = logging.getLogger(__name__)
+from moneywiz_mcp_server.config import validate_path
+from moneywiz_mcp_server.errors import MoneyWizError
+
+from .schema import Schema
+
+
+def read_authorizer(
+    action: int,
+    arg1: str | None,
+    arg2: str | None,
+    _database: str | None,
+    _trigger: str | None,
+) -> int:
+    if action in (sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ, sqlite3.SQLITE_RECURSIVE):
+        return sqlite3.SQLITE_OK
+    if action == sqlite3.SQLITE_FUNCTION:
+        return (
+            sqlite3.SQLITE_DENY
+            if (arg2 or "").lower() in ("load_extension", "writefile")
+            else sqlite3.SQLITE_OK
+        )
+    if action == sqlite3.SQLITE_PRAGMA and (
+        arg1 == "table_info" or (arg1 in ("query_only", "quick_check") and arg2 is None)
+    ):
+        return sqlite3.SQLITE_OK
+    if action == sqlite3.SQLITE_TRANSACTION and arg1 in ("BEGIN", "ROLLBACK"):
+        return sqlite3.SQLITE_OK
+    return sqlite3.SQLITE_DENY
 
 
 class DatabaseManager:
-    """Manages connections to MoneyWiz SQLite database.
-
-    This class provides a high-level interface for accessing MoneyWiz data
-    through both the moneywiz-api library and direct SQLite queries.
-    """
-
-    def __init__(self, db_path: str, read_only: bool = True) -> None:
-        """Initialize DatabaseManager.
-
-        Args:
-            db_path: Path to MoneyWiz SQLite database file
-            read_only: Whether to open database in read-only mode (default: True)
-        """
+    def __init__(self, db_path: str) -> None:
         self.db_path = Path(db_path)
-        self.read_only = read_only
-        self._api: Any | None = None  # MoneywizApi instance
         self._connection: aiosqlite.Connection | None = None
-
-        logger.info(
-            f"DatabaseManager initialized for {db_path} (read_only={read_only})"
-        )
-
-    async def initialize(self) -> None:
-        """Initialize database connections.
-
-        This method sets up both the moneywiz-api interface and async SQLite
-        connection for direct queries.
-
-        Raises:
-            ImportError: If moneywiz-api is not installed
-            sqlite3.Error: If database connection fails
-        """
-        logger.info("Initializing database connections...")
-
-        # Initialize moneywiz-api (optional - will fallback to direct SQLite
-        # if not available)
-        if MoneywizApi is None:
-            logger.warning(
-                "moneywiz-api library not found. Using direct SQLite access only."
-            )
-            self._api = None
-        else:
-            try:
-                # MoneywizApi expects a Path object, not a string
-                self._api = MoneywizApi(self.db_path)
-                logger.debug("MoneywizApi initialized successfully")
-            except Exception as e:
-                # Log the full error details for debugging
-                logger.warning(
-                    f"Failed to initialize MoneywizApi: {type(e).__name__}: {e!s}"
-                )
-                logger.info("Continuing with direct SQLite access only")
-                logger.info(
-                    "This may be due to database schema changes in the latest "
-                    "MoneyWiz version"
-                )
-                self._api = None
-
-        # Initialize async SQLite connection
-        try:
-            if self.read_only:
-                # Use read-only URI for safety
-                uri = f"file:{self.db_path}?mode=ro"
-                self._connection = await aiosqlite.connect(uri, uri=True)
-            else:
-                self._connection = await aiosqlite.connect(str(self.db_path), uri=True)
-
-            # Configure connection for better performance
-            self._connection.row_factory = aiosqlite.Row
-            await self._connection.execute(
-                "PRAGMA query_only = ON"
-                if self.read_only
-                else "PRAGMA query_only = OFF"
-            )
-
-            logger.debug("Async SQLite connection established")
-        except Exception as e:
-            logger.error(f"Failed to establish SQLite connection: {e}")
-            raise
-
-        logger.info("Database connections initialized successfully")
-
-    async def close(self) -> None:
-        """Close database connections.
-
-        This method cleanly closes all open database connections.
-        """
-        logger.info("Closing database connections...")
-
-        if self._connection:
-            try:
-                await self._connection.close()
-                logger.debug("SQLite connection closed")
-            except Exception as e:
-                logger.warning(f"Error closing SQLite connection: {e}")
-            finally:
-                self._connection = None
-
-        # Note: moneywiz-api doesn't require explicit cleanup
-        self._api = None
-
-        logger.info("Database connections closed")
+        self._schema: Schema | None = None
 
     @property
-    def api(self) -> Any:
-        """Get MoneywizApi instance.
-
-        Returns:
-            MoneywizApi instance for high-level database operations
-
-        Raises:
-            RuntimeError: If database not initialized or moneywiz-api unavailable
-        """
-        if self._api is None:
-            raise RuntimeError(
-                "MoneywizApi not available. Using direct SQLite access only."
+    def schema(self) -> Schema:
+        if self._schema is None:
+            raise MoneyWizError(
+                "DATABASE_NOT_INITIALIZED", "Initialize the database first"
             )
-        return self._api
+        return self._schema
 
-    @asynccontextmanager
-    async def transaction(self) -> AsyncGenerator[aiosqlite.Connection, None]:
-        """Context manager for database transactions.
-
-        This method provides transaction support for write operations.
-        Automatically handles commit/rollback based on success/failure.
-
-        Yields:
-            aiosqlite.Connection: Database connection within transaction
-
-        Raises:
-            RuntimeError: If database is in read-only mode
-
-        Example:
-            async with db_manager.transaction() as conn:
-                await conn.execute("INSERT INTO accounts ...")
-        """
-        if self.read_only:
-            raise RuntimeError("Cannot start transaction in read-only mode")
-
-        if not self._connection:
-            raise RuntimeError("Database not initialized. Call initialize() first.")
-
-        logger.debug("Starting database transaction")
-
+    async def initialize(self) -> None:
+        if self._connection is not None:
+            raise MoneyWizError(
+                "DATABASE_ALREADY_OPEN", "Database is already initialized"
+            )
+        self.db_path = validate_path(self.db_path)
         try:
+            # as_uri escapes '?' and '#' in names; do not use immutable=1 (it ignores WAL).
+            self._connection = await aiosqlite.connect(
+                self.db_path.as_uri() + "?mode=ro", uri=True
+            )
+            self._connection.row_factory = aiosqlite.Row
+            await self._connection.execute("PRAGMA query_only=ON")
+            await self._connection.execute("PRAGMA trusted_schema=OFF")
+            await self._connection.set_authorizer(read_authorizer)
             await self._connection.execute("BEGIN")
-            yield self._connection
-            await self._connection.commit()
-            logger.debug("Transaction committed successfully")
-        except Exception as e:
-            await self._connection.rollback()
-            logger.warning(f"Transaction rolled back due to error: {e}")
+            async with self._connection.execute("PRAGMA quick_check") as cursor:
+                checks = await cursor.fetchall()
+                if [r[0] for r in checks] != ["ok"]:
+                    raise MoneyWizError(
+                        "INVALID_DATABASE", "SQLite integrity validation failed"
+                    )
+            self._schema = await Schema.inspect(self)
+        except (sqlite3.Error, OSError) as exc:
+            await self.close()
+            raise MoneyWizError(
+                "INVALID_DATABASE", "Unable to read a valid SQLite MoneyWiz store"
+            ) from exc
+        except BaseException:
+            await self.close()
             raise
+
+    async def close(self) -> None:
+        if self._connection is not None:
+            await self._connection.close()
+        self._connection = None
+        self._schema = None
+
+    async def iter_query(
+        self, query: str, params: tuple[Any, ...] = ()
+    ) -> AsyncIterator[dict[str, Any]]:
+        if self._connection is None:
+            raise MoneyWizError(
+                "DATABASE_NOT_INITIALIZED", "Initialize the database first"
+            )
+        if not query.lstrip().upper().startswith("SELECT "):
+            raise MoneyWizError("READ_ONLY_VIOLATION", "Only SELECT is allowed")
+        try:
+            async with self._connection.execute(query, params) as cursor:
+                while rows := await cursor.fetchmany(256):
+                    for row in rows:
+                        yield dict(row)
+        except sqlite3.Error as exc:
+            raise MoneyWizError(
+                "QUERY_ERROR", "Read query failed; inspect schema_info"
+            ) from exc
 
     async def execute_query(
         self, query: str, params: tuple[Any, ...] | None = None
     ) -> list[dict[str, Any]]:
-        """Execute a SELECT query and return results as dictionaries.
-
-        Args:
-            query: SQL SELECT query to execute
-            params: Optional query parameters
-
-        Returns:
-            List of dictionaries representing query results
-
-        Raises:
-            RuntimeError: If database not initialized
-            sqlite3.Error: If query execution fails
-
-        Example:
-            results = await db_manager.execute_query(
-                "SELECT * FROM accounts WHERE type = ?",
-                ("checking",)
-            )
-        """
-        if not self._connection:
-            raise RuntimeError("Database not initialized. Call initialize() first.")
-
-        logger.debug(
-            f"Executing query: {query[:100]}{'...' if len(query) > 100 else ''}"
-        )
-
-        try:
-            cursor = await self._connection.execute(query, params or ())
-
-            # Get column names from cursor description
-            columns = [description[0] for description in cursor.description]
-
-            # Fetch all rows and convert to dictionaries
-            rows = await cursor.fetchall()
-            result = [dict(zip(columns, row, strict=False)) for row in rows]
-
-            await cursor.close()
-
-            logger.debug(f"Query returned {len(result)} rows")
-            return result
-
-        except Exception as e:
-            logger.error(f"Query execution failed: {e}")
-            raise
+        return [row async for row in self.iter_query(query, params or ())]

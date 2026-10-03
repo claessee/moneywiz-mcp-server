@@ -1,99 +1,171 @@
-"""Account service for MoneyWiz MCP Server."""
+"""Account retrieval with explicit provisional balance components."""
 
-import logging
+from decimal import Decimal
 from typing import Any
 
 from moneywiz_mcp_server.database.connection import DatabaseManager
+from moneywiz_mcp_server.database.schema import ACCOUNT_TYPES, TRANSACTION_TYPES
+from moneywiz_mcp_server.errors import MoneyWizError
+from moneywiz_mcp_server.models.currency_types import (
+    Money,
+    currency_code,
+    decimal_value,
+    exact_add,
+)
+from moneywiz_mcp_server.models.responses import Account
 
-logger = logging.getLogger(__name__)
+from .category_classification_service import required_name
+
+
+def placeholders(values: dict[int, str] | list[int]) -> str:
+    if not values:
+        raise MoneyWizError("SCHEMA_ERROR", "Empty entity set")
+    return ",".join("?" for _ in values)
 
 
 class AccountService:
-    """Service for account operations."""
+    def __init__(self, db_manager: DatabaseManager) -> None:
+        self.db = db_manager
 
-    def __init__(self, db_manager: DatabaseManager):
-        self.db_manager = db_manager
+    async def rows(self) -> dict[int, dict[str, Any]]:
+        roles = self.db.schema.family(ACCOUNT_TYPES)
+        self.db.schema.require_columns(
+            "ZSYNCOBJECT", "ZNAME", "ZCURRENCYNAME", "ZOPENINGBALANCE", "ZARCHIVED"
+        )
+        return {
+            r["Z_PK"]: r
+            for r in await self.db.execute_query(
+                "SELECT * FROM ZSYNCOBJECT WHERE Z_ENT IN ("  # nosec B608
+                + placeholders(roles)
+                + ") ORDER BY Z_PK",
+                tuple(roles),
+            )
+        }
+
+    async def resolve_ids(self, ids: list[str]) -> list[int]:
+        rows = await self.rows()
+        resolved = []
+        for value in ids:
+            matches = [
+                pk
+                for pk, row in rows.items()
+                if str(pk) == value or row.get("ZGID") == value
+            ]
+            if len(matches) != 1:
+                raise MoneyWizError(
+                    "INVALID_PARAMETER", "Account identifier is missing or ambiguous"
+                )
+            resolved.append(matches[0])
+        return sorted(set(resolved))
 
     async def list_accounts(
         self, include_hidden: bool = False, account_type: str | None = None
-    ) -> list[dict[str, Any]]:
-        """List all accounts with balances."""
-        # Account entities: 10=BankCheque, 11=BankSaving, 12=Cash, 13=CreditCard, 14=Loan, 15=Investment, 16=Forex
-        account_entities = [10, 11, 12, 13, 14, 15, 16]
-
-        # Get entity type mapping
-        entity_map = await self.db_manager.execute_query(
-            "SELECT Z_ENT, Z_NAME FROM Z_PRIMARYKEY WHERE Z_ENT IN (10,11,12,13,14,15,16)"
-        )
-        entity_types = {e["Z_ENT"]: e["Z_NAME"] for e in entity_map}
-
-        accounts_data = []
-        for entity_id in account_entities:
-            query = "SELECT * FROM ZSYNCOBJECT WHERE Z_ENT = ?"
-            accounts = await self.db_manager.execute_query(query, (entity_id,))
-
-            for account in accounts:
-                if not include_hidden and account.get("ZARCHIVED", 0) == 1:
-                    continue
-
-                entity_name = entity_types.get(entity_id, "unknown")
-                account_type_mapping = {
-                    "BankChequeAccount": "checking",
-                    "BankSavingAccount": "savings",
-                    "CashAccount": "cash",
-                    "CreditCardAccount": "credit_card",
-                    "LoanAccount": "loan",
-                    "InvestmentAccount": "investment",
-                    "ForexAccount": "forex",
-                }
-                mapped_type = account_type_mapping.get(entity_name, "unknown")
-
-                if account_type and mapped_type != account_type:
-                    continue
-
-                # Calculate balance
-                opening_balance = account.get("ZOPENINGBALANCE", 0)
-                balance_query = "SELECT SUM(ZAMOUNT1) as total FROM ZSYNCOBJECT WHERE Z_ENT IN (37,45,46,47) AND ZACCOUNT2 = ?"
-                balance_result = await self.db_manager.execute_query(
-                    balance_query, (account["Z_PK"],)
+    ) -> list[Account]:
+        if account_type is not None and account_type not in ACCOUNT_TYPES.values():
+            raise MoneyWizError("INVALID_PARAMETER", "Unsupported account type")
+        types = self.db.schema.family(ACCOUNT_TYPES)
+        transaction_types = self.db.schema.family(TRANSACTION_TYPES)
+        self.db.schema.require_columns("ZSYNCOBJECT", "ZAMOUNT1", "ZACCOUNT2")
+        accounts = await self.rows()
+        totals: dict[int, dict[str, Decimal]] = {pk: {} for pk in accounts}
+        counts: dict[int, dict[str, int]] = {pk: {} for pk in accounts}
+        async for row in self.db.iter_query(
+            "SELECT Z_ENT, ZACCOUNT2, ZAMOUNT1 FROM ZSYNCOBJECT WHERE Z_ENT IN ("  # nosec B608
+            + placeholders(transaction_types)
+            + ")",
+            tuple(transaction_types),
+        ):
+            key = row["ZACCOUNT2"]
+            if key not in accounts:
+                raise MoneyWizError(
+                    "DATA_INTEGRITY", "Transaction references an unavailable account"
                 )
-                transaction_total = (
-                    balance_result[0]["total"]
-                    if balance_result and balance_result[0]["total"]
-                    else 0
+            role = transaction_types[row["Z_ENT"]]
+            totals[key][role] = exact_add(
+                totals[key].get(role, Decimal(0)), decimal_value(row["ZAMOUNT1"])
+            )
+            counts[key][role] = counts[key].get(role, 0) + 1
+        output = []
+        for key, row in accounts.items():
+            kind = types[row["Z_ENT"]]
+            if row["ZARCHIVED"] not in (0, 1):
+                raise MoneyWizError("DATA_INTEGRITY", "Invalid account archive flag")
+            if (not include_hidden and row["ZARCHIVED"]) or (
+                account_type is not None and kind != account_type
+            ):
+                continue
+            currency = currency_code(row["ZCURRENCYNAME"])
+            total = Decimal(0)
+            for amount in totals[key].values():
+                total = exact_add(total, amount)
+            opening = (
+                decimal_value(row["ZOPENINGBALANCE"])
+                if row["ZOPENINGBALANCE"] is not None
+                else None
+            )
+            credit = (
+                decimal_value(row["ZCREDITLIMIT"])
+                if row.get("ZCREDITLIMIT") is not None
+                else None
+            )
+            candidate = exact_add(opening, total) if opening is not None else None
+            warnings = [
+                "Calculated balance is opening plus stored account amounts; compare with MoneyWiz UI"
+            ]
+            if kind == "credit_card":
+                warnings.append(
+                    "Credit-card opening balance/limit semantics unresolved (upstream #48)"
                 )
-                current_balance = opening_balance + transaction_total
-
-                accounts_data.append(
-                    {
-                        "id": account.get("ZGID", str(account["Z_PK"])),
-                        "name": account.get("ZNAME", "Unknown Account"),
-                        "type": mapped_type,
-                        "balance": current_balance,
-                        "currency": account.get("ZCURRENCYNAME", "USD"),
-                        "entity_type": entity_name,
-                        "last_updated": str(account.get("ZOBJECTCREATIONDATE", "")),
-                        "archived": bool(account.get("ZARCHIVED", 0)),
-                        "institution": account.get("ZINSTITUTIONNAME", ""),
-                        "account_number": account.get("ZLASTFOURDIGITS", ""),
-                        "created_date": account.get("ZOBJECTCREATIONDATE", ""),
-                    }
+            if opening is None:
+                warnings.append(
+                    "Opening balance is null; no calculated balance is claimed"
                 )
+            if kind in ("investment", "forex", "loan"):
+                warnings.append(
+                    "Valuation/loan semantics unsupported; component sum is diagnostic only"
+                )
+            output.append(
+                Account(
+                    id=str(key),
+                    name=required_name(row, ("ZNAME",)),
+                    type=kind,
+                    currency=currency,
+                    archived=bool(row["ZARCHIVED"]),
+                    calculated_balance=Money(amount=candidate, currency=currency)
+                    if candidate is not None
+                    and kind not in ("investment", "forex", "loan")
+                    else None,
+                    balance_components={
+                        "opening_balance": Money(amount=opening, currency=currency)
+                        if opening is not None
+                        else None,
+                        "transaction_sum": Money(amount=total, currency=currency),
+                        "transaction_sums_by_type": {
+                            t: Money(amount=v, currency=currency)
+                            for t, v in sorted(totals[key].items())
+                        },
+                        "transaction_counts_by_type": counts[key],
+                        "credit_limit": Money(amount=credit, currency=currency)
+                        if credit is not None
+                        else None,
+                        "opening_plus_transactions": Money(
+                            amount=candidate, currency=currency
+                        )
+                        if candidate is not None
+                        else None,
+                        "opening_plus_transactions_plus_limit": Money(
+                            amount=exact_add(candidate, credit), currency=currency
+                        )
+                        if candidate is not None
+                        and credit is not None
+                        and kind == "credit_card"
+                        else None,
+                    },
+                    warnings=warnings,
+                )
+            )
+        return output
 
-        return accounts_data
-
-    async def get_account(
-        self, account_id: str, include_transactions: bool = False
-    ) -> dict[str, Any]:
-        """Get detailed account information."""
-        # TODO: Implement full account details service
-        # For now, return basic account info from list_accounts
-        accounts = await self.list_accounts(include_hidden=True)
-        for account in accounts:
-            if account["id"] == account_id:
-                if include_transactions:
-                    # TODO: Add transaction history
-                    account["recent_transactions"] = []
-                return account
-
-        raise ValueError(f"Account {account_id} not found")
+    async def get_account(self, account_id: str) -> Account:
+        key = (await self.resolve_ids([account_id]))[0]
+        return next(a for a in await self.list_accounts(True) if a.id == str(key))

@@ -1,435 +1,228 @@
-# MoneyWiz MCP Server
+# MoneyWiz MCP Server — local read-only reconciliation fork
 
-A Model Context Protocol (MCP) server that provides AI assistants like Claude with secure, read-only access to your MoneyWiz financial data for natural language queries and financial analytics.
+This fork provides factual MoneyWiz retrieval and exact, deterministic aggregation
+through the official Python MCP SDK 2.3.0. It is **READY FOR READ-ONLY
+RECONCILIATION**, not RECONCILED. No real MoneyWiz database/UI has been compared
+in this implementation session. Original author/license attribution is retained.
 
-![Status: Production Ready](https://img.shields.io/badge/Status-Production%20Ready-green)
-![Platform: macOS](https://img.shields.io/badge/Platform-macOS-blue)
-![Python: 3.12](https://img.shields.io/badge/Python-3.12-blue)
+## Safety and scope
 
-## 🚀 Quick Start
+SQLite always opens with `mode=ro`, `query_only=ON`, `trusted_schema=OFF` and a
+read-only authorizer. There is no writable setting, transaction/commit helper,
+third-party database API, raw-SQL tool, network transport or backup-before-write
+path. `MONEYWIZ_READ_ONLY=false` is rejected rather than interpreted as permission.
+Each tool opens one read transaction, validates SQLite with `quick_check`, builds
+its schema map, reads a consistent snapshot and closes it. WAL data is read;
+`immutable=1` is intentionally avoided because it can ignore WAL changes.
+SQLite may use its normal WAL/shared-memory locking metadata; no financial rows,
+schema, main database bytes or WAL records are written by this server.
 
-```bash
-# 1. Install uv (if not already installed)
-curl -LsSf https://astral.sh/uv/install.sh | sh
+Core Data SQLite is private implementation detail, not a supported MoneyWiz API.
+The adapter covers entity/column observations from upstream source and PR #44,
+tested with fabricated stores with two substantially different entity maps,
+TEXT/REAL monetary values and WAL. This does not demonstrate universal
+MoneyWiz 2/3/iCloud compatibility. Missing/ambiguous relationships, unknown
+populated transaction/account descendants and invalid references fail explicitly.
+Unused abstract entity definitions are allowed. Missing optional capabilities
+are disclosed in `schema_info` and fail explicitly when requested.
 
-# 2. Clone and install
-git clone https://github.com/jcvalerio/moneywiz-mcp-server.git
-cd moneywiz-mcp-server
-uv sync --all-extras
+## Install the local working copy
 
-# 3. Find your MoneyWiz database
-uv run python setup_env.py
+This branch has breaking tool/configuration changes and version `2.0.0.dev0`.
+It has not been published. Do not install the upstream PyPI release expecting
+these guarantees. With uv installed:
 
-# 4. Add to Claude Desktop config and restart
+```sh
+cd /Users/macmini2/Scripts/Codex-files/moneywiz-mcp-server
+uv sync --frozen --all-extras --python 3.12.15
 ```
 
-See [Claude Desktop Setup](#️-claude-desktop-setup) below for the exact JSON configuration.
+The session also leaves an installed `.venv`. Python 3.12.15 is the local tested
+runtime; Python 3.10/3.14 and Linux/macOS are configured in CI but only executed
+locally if recorded in the validation report. CI checks are blocking.
 
-## ✨ What You Can Do
+## Exact database path
 
-Ask Claude natural language questions about your finances:
+Set `MONEYWIZ_DB_PATH` in your MCP client's environment to the absolute primary
+SQLite file. The server deliberately does not load `.env`, inspect arbitrary
+home directories or pick the first candidate. A reported iCloud location is:
 
-### 💰 Account & Transaction Management
-- **"Show me all my MoneyWiz accounts with their balances"**
-- **"Get details for my checking account including recent transactions"**
-- **"Search my transactions from last month in the Groceries category"**
-
-### 📊 Expense Analytics
-- **"Analyze my expenses for the last 3 months by category"**
-- **"What's my savings rate this year?"**
-- **"Which spending category impacts my finances the most?"**
-
-### 💡 Advanced Analytics
-- **"Give me personalized savings recommendations with 25% target rate"**
-- **"Analyze my spending trends over the last 6 months"**
-- **"Show me category trends for my top 5 spending categories"**
-- **"Track my income vs expense trends for financial health"**
-
-### 📅 Scheduled Transactions & Recurring Payments
-- **"Show me all my scheduled transactions"**
-- **"What recurring payments do I have coming up?"**
-- **"Analyze how my next salary covers my commitments"**
-- **"When will my subscriptions and loans end?"**
-
-### 💵 Budget Management
-- **"Show me all my budgets with spending status"**
-- **"Am I on track with my monthly budgets?"**
-- **"Compare my budgeted amounts vs actual spending"**
-- **"Which budgets are at risk of going over?"**
-
-## 📋 Prerequisites
-
-- **macOS**: MoneyWiz MCP Server only supports macOS (MoneyWiz is only available on Apple platforms)
-- **MoneyWiz App**: Install and set up MoneyWiz with some financial data
-- **uv**: Install the uv package manager — it manages Python automatically, no separate Python install required
-  ```bash
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-  ```
-- **Claude Desktop**: Install Claude Desktop application
-
-> **No system Python required.** uv downloads and manages Python 3.12 automatically when you run `uv sync`.
-
-## 🛠️ Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/jcvalerio/moneywiz-mcp-server.git
-cd moneywiz-mcp-server
-
-# Install all dependencies (creates .venv with Python 3.12 automatically)
-uv sync --all-extras
-
-# Run setup to find your MoneyWiz database
-uv run python setup_env.py
+```text
+~/Library/Containers/com.moneywiz.personalfinance/Data/Library/Application Support/MoneyWiz_iCloud.sqlite
 ```
 
-## 📌 Stable Releases and Rollback
+Expand `~` to your actual home directory in JSON/TOML client configuration. This
+path is a documented candidate, not proof of your installation's actual path.
+Legacy container `Data/Documents` stores, including `.AppData`, remain discovery
+candidates. Explicit paths must be regular, readable, nonempty, valid SQLite with
+required Core Data/MoneyWiz tables and entities. Symlink targets are validated.
+`-wal`, `-shm`, `-journal` and `_shared.sqlite` are intentionally rejected as
+primary inputs. Adjacent valid SQLite WAL/SHM files remain necessary for reading
+a live WAL-mode store; never select them or discard them from a live snapshot.
 
-For day-to-day use, prefer a tagged stable release once one is published. This keeps your Claude Desktop setup on known-good behavior while new roadmap work continues.
+`MONEYWIZ_AUTO_DISCOVER=true` explicitly opts into searching only known MoneyWiz
+container/application-support roots. Every candidate undergoes the same
+validation and must have account rows. Zero or multiple plausible candidates
+produce an error; neither directory order nor modification time chooses a store.
+Prefer explicit configuration for all real use.
 
-```bash
-# From an existing source checkout
-git fetch --tags
-git checkout v1.0.0
-uv sync --all-extras
-uv run python setup_env.py
+## Local MCP client setup
+
+For Codex, use an STDIO server with an absolute executable, arguments
+`["-m", "moneywiz_mcp_server"]`, and the exact database path in `env`.
+[Official client configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)
+supports the following TOML shape (also provided in `examples/codex_config.toml`):
+
+```toml
+[mcp_servers.moneywiz]
+command = "/Users/macmini2/Scripts/Codex-files/moneywiz-mcp-server/.venv/bin/python"
+args = ["-m", "moneywiz_mcp_server"]
+
+[mcp_servers.moneywiz.env]
+MONEYWIZ_DB_PATH = "/absolute/path/to/MoneyWiz_iCloud.sqlite"
+MAX_RESULTS = "500"
 ```
 
-To upgrade intentionally, read the release notes first, then check out the desired version:
+This is a configuration example; this task has not changed your Codex settings
+or connected any real database. Reload the client and call `server_status`, then
+`schema_info`, after completing local reconciliation. Generic local MCP clients
+can use the JSON examples in `examples/`.
 
-```bash
-git fetch --tags
-git checkout vX.Y.Z
-uv sync --all-extras
+This server implements local stdio only. A cloud-only ChatGPT connection requires
+an explicitly designed additional access mechanism. No tunnel, HTTP listener,
+remote database access or publishing is included or authorized here.
+
+## Tool catalogue
+
+All tools carry read-only/non-destructive/closed-world annotations. Database
+controls enforce safety independently of these advisory annotations. Successful
+responses are `{ "data": ..., "error": null }`; failures contain a structured
+`error.code` and fixed operational/schema message, with `data: null`. Inspect the
+error field on every call; a normal MCP transport response is not a success
+assertion. SDK input-schema failures use MCP `is_error=true`.
+
+| Tool | Meaning |
+| --- | --- |
+| `server_status` | Connection/SQLite/schema verification, no balances or paths |
+| `schema_info` | Observed entity IDs, table columns, missing optional capabilities |
+| `list_accounts` | Stored accounts, currency and provisional balance components |
+| `get_account` | One returned numeric ID or exact ZGID; ambiguous identifiers fail |
+| `search_transactions` | Explicit interval, account/category/type filtering and pagination |
+| `list_categories` | Category IDs, names and complete parent hierarchy |
+| `list_tags` | Factual stored tag IDs and names |
+| `list_payees` | Factual stored payee IDs and names |
+| `list_budgets` | All budgets, including zero/negative amounts, stored monetary components |
+| `list_scheduled_transactions` | Income/expense/transfer handlers, disabled and one-off schedules included |
+| `summarize_cashflow` | Complete per-currency cashflow/type sums and bounded expense-category breakdown |
+
+`search_transactions` supports `deposit`, `withdraw`, `transfer_in`,
+`transfer_out`, `investment_buy`, `investment_sell`, `investment_exchange`,
+`refund`, `reconcile`, `transfer_budget`. Names map to entity names, never numeric
+IDs or guessed signs. Requested types missing from a schema return explicit
+errors. `account_ids` accept returned IDs or exact ZGIDs; duplicates deduplicate,
+missing/ambiguous references fail. Category names match themselves and descendants;
+equal leaf names can select multiple categories, whose identities remain explicit
+in output. Empty filter lists match no rows and never widen a query.
+
+## Money and balance semantics
+
+Every amount is `{ "amount": "123.4500", "currency": "EUR" }`. Decimal strings
+retain precision. TEXT/INTEGER/REAL values normalize through their deterministic
+Python decimal textual representation; precision already lost in SQLite REAL
+storage cannot be reconstructed. Arithmetic uses sufficient decimal precision,
+never SQLite floating-point SUM or float money calculations. No FX, cross-currency
+total, nominal currency ranking or inferred primary currency exists.
+
+Cashflow income is signed `DepositTransaction` amounts; expenses are negated
+`WithdrawTransaction` amounts. Reversals keep their signs. Net is income minus
+expenses within each currency. Refunds, investments, reconciliations and budget
+transfers are separately labelled stored sums, excluded from these narrowly
+specified income/expense totals. Transfers count **legs**, not deduplicated transfer
+pairs, and never count as income. Expense category breakdown uses category IDs,
+not leaf-name merging; split expenses stay in currency totals with an explicit
+unallocated count rather than fabricated category allocation.
+
+Balances are **provisional**, opening balance plus all observed account amount
+fields, with per-type sums/counts. Null opening balance means no calculated
+balance. Investment/forex/loan valuation is not claimed. Credit cards expose
+opening balance, transaction sum, credit limit, and candidates with/without the
+limit. Neither candidate is labelled authoritative. Issue #48 offers insufficient
+evidence to choose a general credit-card formula. Compare components to the UI.
+
+Budgets expose stored `ZOPENINGBALANCE1`/`ZAMOUNT1`, with their own verified
+currency code/name or `Currency.ZCODE` reference. No account-derived currency,
+assumed CRC, guessed limit, rollover, spent amount or subjective risk label is
+returned. Conflicting/unresolved currency fields are explicit unsupported-schema
+errors. Scheduled data exposes stored recurrence fields; it does not guess end
+conditions, generate executions or treat approximate 30-day months as months.
+
+## Dates, ordering and completeness
+
+Intervals are **[start, end)**. Dates are ISO `YYYY-MM-DD` at midnight in the
+explicit IANA timezone (default `Europe/Lisbon`); datetimes require `T` and an
+explicit offset/`Z`. Naive datetimes, locale dates and natural-language periods
+are rejected. Resolved timezone-aware endpoints are returned. NSDate's epoch is
+2001-01-01T00:00:00Z. Stored dates return UTC, preserving their instant rather than
+inventing a database timezone. Lisbon DST days are tested at 23 and 25 hours.
+Malformed stored dates cannot disappear behind a WHERE interval filter.
+
+Lists accept `limit=1..500` (default 100), `offset=0..10000000` and return
+`matched_count`, `returned_count`, `limit`, `offset`, `truncated`, `next_offset`.
+`MAX_RESULTS` can impose a lower list limit. Transactions order by date DESC,
+ID DESC; schedules by execution date ASC, ID ASC; other lists by ID ASC. Counts
+and rows share a snapshot. Offset pagination across separate live-store calls
+can change when MoneyWiz edits records; use a consistent frozen copy for a full
+multi-page export. A page with an offset is explicitly partial even at the end.
+
+Cashflow streams every matched row; totals are never limited to a transaction
+page. The nested expense-category page is bounded at 500 and reports its own
+truncation; `truncated=false` at cashflow level describes the complete totals.
+Use category-filtered transaction pages to investigate any omitted category
+records. Schema diagnostics bound stores at 500 tables/entities and 1000 columns
+per table; cashflow has at most 500 currency groups, otherwise explicit errors.
+
+## Reconciliation and privacy
+
+Run the local command before client use; [the procedure](docs/RECONCILIATION.md)
+includes exact commands, comparisons and credit-card diagnostics. Exit codes:
+0 = adapter checks completed, **UI comparison still pending**;
+1 = database/configuration validation failed; 2 = explicit incomplete diagnostic
+sections. A zero exit code does not mean RECONCILED. Output omits individual
+transactions/payees/notes by default and uses a home-relative or masked path.
+
+The server performs no networking and installs no telemetry exporter. The SDK's
+default OpenTelemetry server middleware is removed using its
+[documented opt-out](https://py.sdk.modelcontextprotocol.io/run/opentelemetry/).
+Requested data travels over stdio to the MCP client; that client may forward
+tool results to its model provider under its own policy. Routine server logs
+contain no financial records/SQL/arguments/full paths. Keep reconciliation output
+local; database files and reconciliation JSON are ignored by Git and excluded
+from packages. Tests use fabricated data only and never auto-discover real stores.
+
+## Upgrade and development
+
+Keep a local snapshot/branch of the validated checkout. Read changes to schema,
+SDK, money, date and tool contracts before upgrading. Run `uv sync --frozen`,
+all checks and UI reconciliation after any change; restart the MCP client.
+Pin the SDK/dependencies through `pyproject.toml` and committed hash-bearing
+`uv.lock`; do not run an unconstrained install in an MCP startup command.
+
+```sh
+uv run --frozen pytest
+uv run --frozen python scripts/check_critical_coverage.py
+uv run --frozen ruff check .
+uv run --frozen ruff format --check .
+uv run --frozen mypy src/
+uv run --frozen bandit -r src/
+uv run --frozen pip-audit --local --skip-editable
+uv build --no-sources
+uv run --frozen twine check dist/*
 ```
 
-To roll back, return to the previous known-good tag and restart Claude Desktop:
-
-```bash
-git fetch --tags
-git checkout vPREVIOUS_VERSION
-uv sync --all-extras
-```
-
-The Claude Desktop configuration below remains compatible with pinned source checkouts as long as the checkout directory does not move. See [Releasing](docs/RELEASING.md) for the versioning policy and maintainer checklist.
-
-## ⚙️ Configuration
-
-### Automatic Setup (Recommended)
-
-```bash
-uv run python setup_env.py
-```
-
-The setup script will:
-- Search for MoneyWiz databases on your Mac
-- Let you select the correct database
-- Create a `.env` file with your configuration
-- Provide next steps for testing
-
-### Manual Configuration
-
-Create a `.env` file in the project root:
-
-```bash
-# MoneyWiz Database Path
-MONEYWIZ_DB_PATH=/Users/yourusername/Library/Containers/com.moneywiz.personalfinance-setapp/Data/Documents/.AppData/ipadMoneyWiz.sqlite
-
-# Security Settings
-MONEYWIZ_READ_ONLY=true
-
-# Optional Settings
-LOG_LEVEL=INFO
-CACHE_TTL=300
-MAX_RESULTS=1000
-```
-
-### Finding Your MoneyWiz Database
-
-MoneyWiz stores data in these locations on macOS:
-
-```bash
-# MoneyWiz 3 (most common)
-~/Library/Containers/com.moneywiz.mac/Data/Documents/
-~/Library/Containers/com.moneywiz.personalfinance/Data/Documents/
-~/Library/Containers/com.moneywiz.personalfinance-setapp/Data/Documents/
-
-# MoneyWiz 2
-~/Library/Application Support/SilverWiz/MoneyWiz 2/
-```
-
-Search command:
-```bash
-find ~ -name "*.sqlite*" 2>/dev/null | grep -i moneywiz
-```
-
-## 🖥️ Claude Desktop Setup
-
-### 1. Find Your Claude Desktop Config
-
-```bash
-~/Library/Application Support/Claude/claude_desktop_config.json
-```
-
-### 2. Add MCP Server Configuration
-
-Claude Desktop does not source your shell, so bare commands like `python` or `uv` won't be found. Use absolute paths in the configuration.
-
-#### Option A: Source Checkout
-
-Use this option if you cloned the repository and ran `uv sync --all-extras`.
-
-```json
-{
-  "mcpServers": {
-    "moneywiz": {
-      "command": "/ABSOLUTE/PATH/TO/moneywiz-mcp-server/.venv/bin/python",
-      "args": ["-m", "moneywiz_mcp_server"],
-      "cwd": "/ABSOLUTE/PATH/TO/moneywiz-mcp-server"
-    }
-  }
-}
-```
-
-**Get your absolute path:**
-```bash
-echo "$(pwd)/.venv/bin/python"
-# Example output: /Users/yourname/dev/moneywiz-mcp-server/.venv/bin/python
-```
-
-The `.venv/bin/python` binary is self-contained — it does **not** require Python to be installed globally on your Mac.
-
-The `cwd` field is required so the server can locate the `.env` file with your database path.
-
-#### Option B: PyPI with `uvx`
-
-Use this option if you want Claude Desktop to run the published package without a source checkout. Because there is no checkout-local `.env` file in this mode, provide the MoneyWiz database path through the `env` block.
-
-First, find the absolute path to `uv`:
-
-```bash
-command -v uv
-# Example output: /Users/yourname/.local/bin/uv
-```
-
-Then configure Claude Desktop. Pin the package version for stable behavior, and replace `MONEYWIZ_DB_PATH` with your actual SQLite database path.
-
-```json
-{
-  "mcpServers": {
-    "moneywiz": {
-      "command": "/ABSOLUTE/PATH/TO/uv",
-      "args": [
-        "x",
-        "--from",
-        "moneywiz-mcp-server==1.0.1",
-        "moneywiz-mcp-server"
-      ],
-      "env": {
-        "MONEYWIZ_DB_PATH": "/ABSOLUTE/PATH/TO/ipadMoneyWiz.sqlite",
-        "MONEYWIZ_READ_ONLY": "true"
-      }
-    }
-  }
-}
-```
-
-If you prefer to use the newest published package instead of a pinned version, remove `==1.0.1`. Pinned versions are recommended for day-to-day use.
-
-### 3. Restart Claude Desktop
-
-Completely quit and reopen Claude Desktop for changes to take effect.
-
-## 🧪 Testing
-
-### Test Database Connection
-```bash
-uv run python -c "
-from moneywiz_mcp_server.config import Config
-from moneywiz_mcp_server.database.connection import DatabaseManager
-import asyncio
-
-async def test():
-    config = Config.from_env()
-    print(f'Database: {config.database_path}')
-    db = DatabaseManager(config.database_path)
-    await db.initialize()
-    print('✅ Database connection successful!')
-    await db.close()
-
-asyncio.run(test())
-"
-```
-
-### Test MCP Server
-```bash
-# Start the server (should connect via stdio)
-uv run python -m moneywiz_mcp_server
-```
-
-## 🛡️ Available Tools
-
-Once configured, Claude will have access to these MoneyWiz tools:
-
-### Account Management
-- **`list_accounts`** - List all accounts with balances and types
-- **`get_account`** - Get detailed account information by ID
-
-### Transaction Management
-- **`search_transactions`** - Search transactions with natural language time periods and filters
-
-### Financial Analytics
-- **`analyze_expenses_by_category`** - Analyze spending patterns by category
-- **`analyze_income_vs_expenses`** - Compare income vs expenses with savings analysis
-
-### Advanced Analytics
-- **`get_savings_recommendations`** - Personalized savings optimization with actionable tips
-- **`analyze_spending_trends`** - Statistical trend analysis with projections and insights
-- **`analyze_category_trends`** - Multi-category trend comparison and growth analysis
-- **`analyze_income_expense_trends`** - Income vs expense sustainability tracking
-
-### Scheduled Transactions & Recurring Payments
-- **`get_scheduled_transactions`** - List all scheduled and recurring transactions
-- **`analyze_salary_breakdown`** - Analyze how salary covers commitments
-- **`get_commitments_ending_timeline`** - Track when subscriptions, loans, and recurring payments end
-
-### Budget Management
-- **`get_budgets`** - List all budgets with spending status and percentages
-- **`analyze_budget_performance`** - Analyze which budgets are on track or at risk
-- **`get_budget_vs_actual`** - Compare budgeted amounts vs actual spending by category
-
-## 🔧 Technical Details
-
-### Architecture
-- **MCP Server**: Modern FastMCP with decorator-based tool registration
-- **Database**: Direct Core Data SQLite access (read-only by default)
-- **Analytics**: Advanced savings optimization and trend analysis services
-- **Safety**: Read-only mode by default with comprehensive input validation
-- **Integration**: Seamless Claude Desktop integration with structured JSON responses
-
-### Database Support
-- **MoneyWiz 3**: Full support for latest version including Setapp
-- **MoneyWiz 2**: Legacy support
-- **Data**: Accounts, transactions, categories, payees
-- **Size**: Efficiently handles databases with thousands of transactions
-
-## 🐛 Troubleshooting
-
-### Server Won't Start
-
-```bash
-# Check if database file exists
-ls -la "/path/to/your/MoneyWiz.sqlite"
-
-# Test configuration
-uv run python -c "from moneywiz_mcp_server.config import Config; print(Config.from_env().database_path)"
-
-# Check server logs
-uv run python -m moneywiz_mcp_server 2>&1 | head -20
-```
-
-### Claude Desktop Connection Issues
-
-1. **Validate JSON syntax**:
-   ```bash
-   python3 -c "import json; print(json.load(open('$HOME/Library/Application Support/Claude/claude_desktop_config.json')))"
-   ```
-
-2. **Verify the .venv Python path exists**:
-   ```bash
-   ls -la /ABSOLUTE/PATH/TO/moneywiz-mcp-server/.venv/bin/python
-   ```
-
-3. **Test the exact command Claude Desktop will run**:
-   ```bash
-   /ABSOLUTE/PATH/TO/moneywiz-mcp-server/.venv/bin/python -m moneywiz_mcp_server
-   ```
-
-4. **Check file permissions**:
-   ```bash
-   ls -la "/path/to/your/MoneyWiz.sqlite"
-   ```
-
-### Common Issues
-
-- **"Database not found"**: Check `MONEYWIZ_DB_PATH` in `.env` and use absolute paths
-- **"Permission denied"**: Ensure file permissions and MoneyWiz isn't locking the file
-- **"MCP server not responding"**: Restart Claude Desktop and verify the `.venv/bin/python` path is correct
-- **"No data found"**: Ensure MoneyWiz has transaction data and is the correct database
-- **"command not found"**: Make sure you're using the absolute `.venv/bin/python` path, not bare `python`
-
-## 🔒 Security
-
-- **Read-Only Mode**: Database opened in read-only mode by default
-- **Local Access**: Only accesses local database files
-- **No Network**: No external network connections
-- **Privacy**: All data processing happens locally
-- **Validation**: All inputs validated before database queries
-
-## 📁 Project Structure
-
-```
-moneywiz-mcp-server/
-├── README.md                    # This file
-├── pyproject.toml              # Package configuration
-├── uv.lock                     # Locked dependency versions
-├── .python-version             # Python version pin (3.12.7)
-├── setup_env.py               # Setup helper script
-├── examples/                   # Configuration examples
-│   ├── claude_desktop_config.json
-│   ├── claude_desktop_config_venv.json
-│   └── claude_code_config.json
-├── src/moneywiz_mcp_server/    # Main package
-│   ├── main.py                 # FastMCP server entry point
-│   ├── config.py               # Configuration
-│   ├── database/               # Database connection
-│   ├── tools/                  # MCP tools
-│   ├── services/               # Business logic
-│   └── utils/                  # Utilities
-└── tests/                      # Test suite
-```
-
-## 🚀 Development
-
-### Setup Development Environment
-```bash
-git clone https://github.com/jcvalerio/moneywiz-mcp-server.git
-cd moneywiz-mcp-server
-uv sync --all-extras
-uv run python setup_env.py
-```
-
-### Run Tests
-```bash
-uv run pytest tests/ -v
-```
-
-### Code Quality
-```bash
-uv run ruff check .        # Linting
-uv run ruff format .       # Formatting
-uv run mypy src/           # Type checking
-./scripts/check-ci.sh     # Full CI simulation
-```
-
-## 📄 License
-
-MIT License - see LICENSE file for details.
-
-## 🆘 Support
-
-- **Issues**: [GitHub Issues](https://github.com/jcvalerio/moneywiz-mcp-server/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/jcvalerio/moneywiz-mcp-server/discussions)
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes with tests
-4. Submit a pull request
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
-
----
-
-**⚠️ Important**: Always use read-only mode and back up your MoneyWiz database before first use.
+The full suite enforces 85% global coverage and a separate 90% minimum in each
+critical database/schema/money/service/date/MCP module, with regression-heavy critical components
+rather than trivial mocks. Full Bandit scanning is enabled; reviewed B608
+exemptions cover only dynamically built bound-value/quoted-identifier queries.
+No global B608 exemption or nonblocking type/security checks remain.
+See [engineering evidence](docs/ENGINEERING_AUDIT.md) and
+[implementation/validation report](docs/IMPLEMENTATION_REPORT.md).
