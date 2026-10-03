@@ -36,7 +36,7 @@ The implementation has been reconciled against independent MoneyWiz exports for 
 ## Architecture
 
 <p align="center">
-  <img src="docs/assets/moneywiz-mcp-icon.svg" alt="MoneyWiz MCP Server icon" width="220">
+  <img src="docs/assets/moneywiz-mcp-architecture.jpg" alt="MoneyWiz MCP Server architecture" width="100%">
 </p>
 
 The data path is intentionally simple:
