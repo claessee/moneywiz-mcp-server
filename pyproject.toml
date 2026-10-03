@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "moneywiz-mcp-server"
-version = "2.0.0.dev0"
-description = "Read-only MCP server for local MoneyWiz financial analytics"
+version = "2.0.0"
+description = "Unofficial, permanently read-only MCP v2 server for local MoneyWiz data on macOS"
 authors = [
     {name = "Juan Carlos Valerio Arrieta", email = "jcvalerio@gmail.com"}
 ]
 maintainers = [
-    {name = "Juan Carlos Valerio Arrieta", email = "jcvalerio@gmail.com"}
+    {name = "claessee"}
 ]
 readme = "README.md"
 license = "MIT"
@@ -19,13 +19,13 @@ requires-python = ">=3.10"
 keywords = [
     "ai",
     "analytics",
-    "claude",
     "finance",
     "macos",
     "mcp",
     "model-context-protocol",
     "moneywiz",
     "personal-finance",
+    "read-only",
     "sqlite",
 ]
 classifiers = [
@@ -62,11 +62,12 @@ moneywiz-mcp-server = "moneywiz_mcp_server.main:cli_main"
 moneywiz-validate = "moneywiz_mcp_server.validate:main"
 
 [project.urls]
-"Homepage" = "https://github.com/jcvalerio/moneywiz-mcp-server"
-"Documentation" = "https://github.com/jcvalerio/moneywiz-mcp-server#readme"
-"Changelog" = "https://github.com/jcvalerio/moneywiz-mcp-server/blob/main/CHANGELOG.md"
-"Bug Reports" = "https://github.com/jcvalerio/moneywiz-mcp-server/issues"
-"Source" = "https://github.com/jcvalerio/moneywiz-mcp-server"
+"Homepage" = "https://github.com/claessee/moneywiz-mcp-server"
+"Documentation" = "https://github.com/claessee/moneywiz-mcp-server#readme"
+"Changelog" = "https://github.com/claessee/moneywiz-mcp-server/blob/main/CHANGELOG.md"
+"Bug Reports" = "https://github.com/claessee/moneywiz-mcp-server/issues"
+"Source" = "https://github.com/claessee/moneywiz-mcp-server"
+"Upstream" = "https://github.com/jcvalerio/moneywiz-mcp-server"
 
 [tool.setuptools.packages.find]
 where = ["src"]
