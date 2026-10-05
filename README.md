@@ -8,6 +8,8 @@
 
 MoneyWiz MCP Server lets MCP-compatible clients query a local MoneyWiz database through a deterministic, read-only interface. It is designed for factual retrieval and reproducible aggregation, not financial advice.
 
+**Klarhet Studio:** https://klarhetstudio.com
+
 **Version 2.1.0** adds bills due in a week or month, account filters, overdue schedule state, and per-currency totals with explicit recurrence limits. See the [release notes](docs/RELEASE_NOTES_v2.1.0.md).
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB)](https://www.python.org/)
