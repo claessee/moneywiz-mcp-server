@@ -316,9 +316,11 @@ async def test_all_write_routes_rejected(db, sql):
 
 
 async def test_uri_is_readonly_even_without_query_guard(db):
-    # Keep authorizer permitting all and query_only OFF only to probe mode=ro itself.
-    await db._connection.set_authorizer(None)
+    # Python 3.10 cannot disable the authorizer with None; permit all in this test.
+    await db._connection.set_authorizer(lambda *_args: sqlite3.SQLITE_OK)
     await db._connection.execute("PRAGMA query_only=OFF")
+    async with db._connection.execute("PRAGMA query_only") as cursor:
+        assert (await cursor.fetchone())[0] == 0
     with pytest.raises(sqlite3.OperationalError, match="readonly"):
         await db._connection.execute("DELETE FROM ZSYNCOBJECT")
 
