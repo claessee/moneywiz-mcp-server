@@ -37,12 +37,12 @@ The MCP SDK version is independently pinned in `pyproject.toml` and `uv.lock`.
 After all checks pass on the intended release commit:
 
 ```sh
-git tag -a v2.0.0 -m "MoneyWiz MCP Server v2.0.0"
+git tag -a v2.1.0 -m "MoneyWiz MCP Server v2.1.0"
 git push origin main
-git push origin v2.0.0
+git push origin v2.1.0
 ```
 
-Then create a GitHub Release from the tag and use `docs/RELEASE_NOTES_v2.0.0.md` as the basis for the release notes.
+Then create a GitHub Release from the tag and use `docs/RELEASE_NOTES_v2.1.0.md` as the basis for the release notes. Tagging and publishing a GitHub Release are separate from committing and pushing source updates.
 
 Do not publish to the upstream PyPI project from this repository. The distribution name `moneywiz-mcp-server` originated with the upstream project. GitHub source/releases are sufficient for this maintained derivative unless a distinct PyPI distribution identity is deliberately chosen later.
 

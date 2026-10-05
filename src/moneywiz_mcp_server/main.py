@@ -2,6 +2,8 @@
 
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from datetime import datetime
+from datetime import timezone as datetime_timezone
 from functools import wraps
 import inspect
 import json
@@ -23,6 +25,7 @@ from .models.responses import (
     Account,
     Budget,
     Category,
+    DueBillsResult,
     Page,
     ScheduledTransaction,
     page,
@@ -33,9 +36,10 @@ from .services.category_classification_service import (
     CategoryClassificationService,
     required_name,
 )
+from .services.due_bill_service import DueBillService
 from .services.scheduled_transaction_service import ScheduledTransactionService
 from .services.transaction_service import TransactionService, validate_page
-from .utils.date_utils import interval
+from .utils.date_utils import interval, parse_iso
 
 mcp = MCPServer(
     "moneywiz-read-only", version=__version__, log_level="ERROR", subscriptions=False
@@ -265,6 +269,36 @@ async def list_scheduled_transactions(
             limit,
             offset,
             ["Scheduled entity absent from this model: " + name for name in missing],
+        )
+
+
+@mcp.tool(annotations=READ_ONLY)
+@guarded
+async def list_due_bills(
+    start: Identifier,
+    end: Identifier,
+    timezone: str = "UTC",
+    account_ids: Filters | None = None,
+    include_overdue: bool = True,
+    as_of: Identifier | None = None,
+    limit: Limit = 100,
+    offset: Offset = 0,
+) -> DueBillsResult:
+    """Remaining bills over [start,end), max 366 days. Use the user's IANA timezone and Monday-to-next-Monday for this week or first-to-next-first for this month. Active expenses only; transfers returned separately in totals, income excluded. Earlier stored overdue payments included by default. Verified monthly/yearly projections only; unsupported rules report incomplete forecasts and totals. Paid/skipped history is not reconstructed. Totals cover all known occurrences before pagination. as_of is an optional offset-aware datetime, otherwise current UTC. Follow next_offset on both page and unresolved_schedules."""
+    checked_limit(limit, offset)
+    period = interval(start, end, timezone)
+    if as_of is not None and "T" not in as_of:
+        raise MoneyWizError(
+            "INVALID_PARAMETER", "as_of requires an offset-aware datetime"
+        )
+    reference = (
+        parse_iso(as_of, timezone)
+        if as_of is not None
+        else datetime.now(datetime_timezone.utc)
+    )
+    async with database(limit) as db:
+        return await DueBillService(db).list_due_bills(
+            period, reference, account_ids, include_overdue, limit, offset
         )
 
 

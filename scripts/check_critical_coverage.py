@@ -16,6 +16,7 @@ modules = [
     "services/category_classification_service.py",
     "services/budget_service.py",
     "services/scheduled_transaction_service.py",
+    "services/due_bill_service.py",
     "utils/date_utils.py",
     "main.py",
 ]

@@ -1,6 +1,6 @@
 # MCP tool reference
 
-MoneyWiz MCP Server 2.x exposes eleven factual, read-only tools. Tool annotations describe read-only/non-destructive intent, while the SQLite boundary independently enforces it.
+MoneyWiz MCP Server 2.x exposes twelve read-only tools. Tool annotations describe read-only/non-destructive intent, while the SQLite boundary independently enforces it.
 
 Successful service responses use a structured data/error envelope. MCP input-schema failures use normal MCP error status.
 
@@ -45,6 +45,14 @@ Lists verified stored budget fields and explicit currency data. The server does 
 ## `list_scheduled_transactions`
 
 Lists stored scheduled transaction definitions, including supported income, expense, and transfer handlers. Disabled and one-off records remain factual stored definitions. The server does not forecast future executions from guessed recurrence semantics.
+
+## `list_due_bills`
+
+Finds remaining scheduled expenses and transfers over an explicit `[start, end)` interval, with an optional account filter and earlier overdue stored payments. Income and disabled schedules are excluded. Results identify the account, local due date/time, signed stored amount, stored/projected basis, and schedule state. Overdue means the stored date precedes `as_of`, not proof of an unpaid bank invoice.
+
+Totals separate period bills, period transfers, and overdue payments before the period, by currency. They cover every known occurrence before pagination. `projection_complete` and `totals_complete` are false when a relevant rule or handler family is unsupported. Both payments and unresolved schedules expose independent page metadata using the requested limit/offset; follow each `next_offset`.
+
+Verified simple monthly/yearly recurrences may be projected. Other rules remain explicit limitations. Paid/skipped history is not reconstructed. See [`DUE_BILLS.md`](DUE_BILLS.md) for parameters, examples and evidence.
 
 ## `summarize_cashflow`
 

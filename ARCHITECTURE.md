@@ -59,9 +59,10 @@ The service layer remains factual and deterministic:
 - tags and payees
 - budgets using verified stored fields
 - scheduled transaction definitions
+- remaining due bills and transfers with explicitly bounded recurrence projections
 - per-currency cashflow summaries
 
-The 2.x line intentionally removed subjective financial-health scores, savings recommendations, vague importance rankings, and recurrence forecasts that are better handled by the calling model from factual MCP data.
+The 2.x line intentionally removed subjective financial-health scores, savings recommendations, vague importance rankings, and guessed recurrence forecasts. The due-bill service supports only verified simple monthly/yearly rules and reports incomplete commitments whenever it encounters unsupported rules. Stored due dates and projections remain distinct; no payment history or bank settlement is inferred.
 
 ## Error model
 

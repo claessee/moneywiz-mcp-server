@@ -33,6 +33,7 @@ async def test_tool_inventory_annotations_and_structured_models():
             "list_payees",
             "list_budgets",
             "list_scheduled_transactions",
+            "list_due_bills",
             "summarize_cashflow",
         }
         for tool in inventory.tools:
@@ -58,6 +59,15 @@ async def test_tool_inventory_annotations_and_structured_models():
         ("list_payees", {}),
         ("list_budgets", {}),
         ("list_scheduled_transactions", {}),
+        (
+            "list_due_bills",
+            {
+                "start": "2026-09-14",
+                "end": "2026-09-21",
+                "timezone": "Europe/Lisbon",
+                "as_of": "2026-09-14T00:00:00Z",
+            },
+        ),
         (
             "search_transactions",
             {
@@ -151,6 +161,45 @@ async def test_mcp_input_bounds():
             assert result.is_error
 
 
+async def test_due_bills_protocol_pagination_totals_and_errors():
+    args = {
+        "start": "2026-09-01",
+        "end": "2026-11-01",
+        "timezone": "Europe/Lisbon",
+        "as_of": "2026-09-01T00:00:00+01:00",
+        "limit": 1,
+    }
+    async with Client(main.mcp) as client:
+        result = await client.call_tool("list_due_bills", args)
+        assert not result.is_error
+        data = result.structured_content["data"]
+        assert data["projection_complete"]
+        assert data["totals_complete"]
+        assert data["page"]["matched_count"] == 2
+        assert data["page"]["next_offset"] == 1
+        assert data["page"]["items"][0]["basis"] == "stored_next_execution"
+        assert data["totals"]["bills_in_interval"] == [
+            {"amount": "100", "currency": "EUR"}
+        ]
+        second = await client.call_tool("list_due_bills", {**args, "offset": 1})
+        assert (
+            second.structured_content["data"]["page"]["items"][0]["basis"]
+            == "projected"
+        )
+        for invalid in (
+            {"as_of": "2026-09-01"},
+            {"as_of": "2026-09-01T12:00:00"},
+            {"end": "2028-01-01"},
+            {"timezone": "invalid"},
+            {"account_ids": ["missing"]},
+        ):
+            failure = await client.call_tool("list_due_bills", {**args, **invalid})
+            assert failure.structured_content["data"] is None
+            assert failure.structured_content["error"]["code"] == "INVALID_PARAMETER"
+        failure = await client.call_tool("list_due_bills", {**args, "limit": 501})
+        assert failure.is_error
+
+
 async def test_mcp_offset_and_hidden_accounts(synthetic):
     import sqlite3
 
@@ -174,6 +223,9 @@ async def test_configured_maximum(synthetic, monkeypatch):
 
     monkeypatch.setattr(main, "_config", Config(str(synthetic[0]), max_results=1))
     assert (await main.list_accounts(limit=2)).error.code == "INVALID_PARAMETER"
+    assert (
+        await main.list_due_bills("2026-09-01", "2026-10-01", limit=2)
+    ).error.code == "INVALID_PARAMETER"
 
 
 async def test_unexpected_exception_sanitized(monkeypatch):

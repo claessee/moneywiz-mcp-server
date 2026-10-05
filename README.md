@@ -8,6 +8,8 @@
 
 MoneyWiz MCP Server lets MCP-compatible clients query a local MoneyWiz database through a deterministic, read-only interface. It is designed for factual retrieval and reproducible aggregation, not financial advice.
 
+**Version 2.1.0** adds bills due in a week or month, account filters, overdue schedule state, and per-currency totals with explicit recurrence limits. See the [release notes](docs/RELEASE_NOTES_v2.1.0.md).
+
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB)](https://www.python.org/)
 [![MCP](https://img.shields.io/badge/MCP-v2-35c7c9)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -110,6 +112,10 @@ MAX_RESULTS = "500"
 
 Equivalent stdio configurations can be used with other MCP clients. Examples are in [`examples/`](examples/).
 
+### Updating from 2.0.0
+
+After updating the source, run `uv sync --frozen --all-extras` and restart or reconnect your MCP client. If your Codex configuration has an `enabled_tools` allowlist for MoneyWiz, add `"list_due_bills"` to that list so the new tool is exposed. The existing database configuration and tools remain compatible.
+
 ## Available tools
 
 | Tool | Purpose |
@@ -124,9 +130,12 @@ Equivalent stdio configurations can be used with other MCP clients. Examples are
 | `list_payees` | List stored payees |
 | `list_budgets` | List factual stored budget fields |
 | `list_scheduled_transactions` | List stored scheduled transaction definitions |
+| `list_due_bills` | Find remaining bills and transfers due in a period, with overdue state and bounded recurrence projections |
 | `summarize_cashflow` | Deterministic per-currency cashflow and category summary |
 
 All list-style tools expose bounded pagination and completeness metadata. See the source tool schemas for the authoritative parameter contract.
+
+For “bills due this week/month”, use `list_due_bills` with explicit dates and the user's timezone. It separates expenses from transfers and income, calculates per-currency totals before pagination, and labels stored next dates separately from projected occurrences. Unsupported recurrence rules make forecast completeness and totals completeness explicitly false. See [`docs/DUE_BILLS.md`](docs/DUE_BILLS.md) for the supported rules and examples.
 
 ## Money and currency semantics
 

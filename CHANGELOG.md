@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.0 — 2026-10-05
+
+- Add `list_due_bills` with explicit timezone-aware periods, account filters, earlier overdue schedules, separate bill/transfer totals per currency, and stable pagination.
+- Add conservative monthly/yearly projections with explicit unsupported-rule and incomplete-total reporting. Stored due dates remain distinct from estimates; no paid/skipped history or bank settlement is inferred.
+- Expose observed weekend/anchor metadata in stored scheduled definitions without changing the existing balance formula or permanent read-only boundary.
+- Add synthetic regression and MCP protocol coverage for date boundaries, DST, recurrence limits, exact totals, filtering and completeness.
+
 ## 2.0.0 — 2026-10-03
 
 First public release of the hardened 2.x line, based on upstream `jcvalerio/moneywiz-mcp-server` at commit `d113a11df8ea475f50b5d118585c763bb4f5ba72`.

@@ -89,6 +89,9 @@ class ScheduledTransactionService:
                             "ZONWEEKENDSEXECUTE",
                             "ZENDDATE",
                             "ZTOTALOCCURRENCES",
+                            "ZWEEKENDSHANDLER",
+                            "ZWEEKENDOPTION",
+                            "ZFIRSTEXECUTEDATE",
                         )
                         if c in row
                     },

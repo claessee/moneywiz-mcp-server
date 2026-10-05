@@ -19,7 +19,7 @@ Enable Issues and GitHub Actions. GitHub Discussions are optional. Enable privat
 Confirm:
 
 - `README.md`, `ATTRIBUTION.md`, `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md`, and `CODE_OF_CONDUCT.md` are present.
-- package/version metadata says `2.0.0`.
+- package/version metadata says `2.1.0` and matches `uv.lock`.
 - all client examples contain generic paths only.
 - no real MoneyWiz database, WAL/SHM file, financial export, reconciliation JSON, account data, credentials, or private local paths are tracked.
 - the locked quality suite passes on the exact public release commit.
@@ -45,7 +45,7 @@ If `pyproject.toml` was changed after the current lock was generated, refresh `u
 
 ## GitHub release
 
-After the intended release commit passes all checks, tag it as `v2.0.0` and create a GitHub Release using [`RELEASE_NOTES_v2.0.0.md`](RELEASE_NOTES_v2.0.0.md).
+After the intended release commit passes all checks, tag it as `v2.1.0` and create a GitHub Release using [`RELEASE_NOTES_v2.1.0.md`](RELEASE_NOTES_v2.1.0.md). These release steps are separate from pushing a source update.
 
 Do not publish this derivative under the upstream PyPI project identity. The existing distribution name originated with the upstream project. GitHub source/releases are sufficient unless a distinct package identity is selected later.
 
